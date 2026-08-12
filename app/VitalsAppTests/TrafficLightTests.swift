@@ -48,4 +48,16 @@ final class TrafficLightTests: XCTestCase {
         let findings = [finding(.info)]
         XCTAssertEqual(TrafficLight.tooltip(for: findings), "Vitals — 1 finding(s), highest: info")
     }
+
+    func testStatusLabelForNoFindings() {
+        XCTAssertEqual(TrafficLight.statusLabel(for: []), "All clear")
+    }
+
+    func testStatusLabelForOneFinding() {
+        XCTAssertEqual(TrafficLight.statusLabel(for: [finding(.warn)]), "1 finding")
+    }
+
+    func testStatusLabelForMultipleFindingsIsPlural() {
+        XCTAssertEqual(TrafficLight.statusLabel(for: [finding(.warn), finding(.info)]), "2 findings")
+    }
 }

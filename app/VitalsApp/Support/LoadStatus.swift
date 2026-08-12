@@ -38,4 +38,15 @@ enum LoadStatus: Equatable {
         case .critical: return "Critical"
         }
     }
+
+    /// A 0...1 fill for a progress bar, capped so `criticalFactor ×
+    /// performanceCores` reads as "full" — the same threshold `evaluate`
+    /// already treats as critical, so the bar and the color/label always
+    /// agree with each other.
+    static func progressFraction(load1: Double, performanceCores: UInt32) -> Double {
+        guard performanceCores > 0 else { return 0 }
+        let ceiling = Double(performanceCores) * criticalFactor
+        guard ceiling > 0 else { return 0 }
+        return min(load1 / ceiling, 1.0)
+    }
 }

@@ -37,4 +37,25 @@ final class LoadStatusTests: XCTestCase {
     func testCriticalLabelIsHumanReadable() {
         XCTAssertEqual(LoadStatus.critical.label, "Critical")
     }
+
+    func testProgressFractionAtZeroLoadIsZero() {
+        XCTAssertEqual(LoadStatus.progressFraction(load1: 0, performanceCores: 10), 0, accuracy: 0.001)
+    }
+
+    func testProgressFractionAtHalfOfCriticalIsHalf() {
+        // criticalFactor is 1.5, so 1.5 * 10 / 2 = 7.5 is the halfway point.
+        XCTAssertEqual(LoadStatus.progressFraction(load1: 7.5, performanceCores: 10), 0.5, accuracy: 0.001)
+    }
+
+    func testProgressFractionAtCriticalThresholdIsFull() {
+        XCTAssertEqual(LoadStatus.progressFraction(load1: 15, performanceCores: 10), 1.0, accuracy: 0.001)
+    }
+
+    func testProgressFractionCapsAtOneWellAboveCritical() {
+        XCTAssertEqual(LoadStatus.progressFraction(load1: 100, performanceCores: 10), 1.0, accuracy: 0.001)
+    }
+
+    func testProgressFractionIsZeroWithNoPerformanceCores() {
+        XCTAssertEqual(LoadStatus.progressFraction(load1: 100, performanceCores: 0), 0, accuracy: 0.001)
+    }
 }

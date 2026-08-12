@@ -37,23 +37,29 @@ struct MenubarView: View {
     }
 
     private var header: some View {
-        HStack {
+        HStack(spacing: 8) {
             Text("Vitals")
                 .font(.headline)
+            if let report = appState.report {
+                statusPill(report.findings)
+            }
             Spacer()
-            if let lastUpdated = appState.lastUpdated {
-                Text(lastUpdated, style: .relative)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            Button {
-                Task { await appState.refresh() }
-            } label: {
-                Image(systemName: "arrow.clockwise")
-            }
-            .buttonStyle(.plain)
         }
         .padding(12)
+    }
+
+    /// Mirrors a plan/status pill next to an app's name (a pattern several
+    /// menu bar apps use) — an at-a-glance summary before you even open
+    /// the sections below.
+    private func statusPill(_ findings: [Finding]) -> some View {
+        let light = TrafficLight.from(findings: findings)
+        return Text(TrafficLight.statusLabel(for: findings))
+            .font(.caption2.weight(.bold))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(light.color.opacity(0.15))
+            .foregroundStyle(light.color)
+            .clipShape(Capsule())
     }
 
     @ViewBuilder
@@ -82,13 +88,94 @@ struct MenubarView: View {
     }
 
     private func reportView(_ report: VitalsReport) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
             metricsSection(report)
-            if report.findings.isEmpty {
-                Text("No findings — all vital signs normal.")
-                    .font(.callout)
+            findingsSection(report)
+        }
+        .padding(12)
+    }
+
+    private func sectionHeader(_ icon: String, _ title: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon)
+                .foregroundStyle(.secondary)
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+        }
+    }
+
+    /// A single bordered "card" for the at-a-glance numbers — load
+    /// average (the one figure worth a bigger, bolder treatment, plus a
+    /// progress bar against the same critical threshold the rule engine
+    /// uses) and the docker/DDEV counts as a second row, rather than the
+    /// counts floating unattached between the card and the findings list.
+    /// The background tint alone barely showed up against the window's
+    /// own vibrancy material, so a matching-color border makes the
+    /// boundary actually visible.
+    private func metricsSection(_ report: VitalsReport) -> some View {
+        let load = report.system.load
+        let cores = report.system.cores
+        let status = LoadStatus.evaluate(load1: load.m1, performanceCores: cores.performance)
+        let fraction = LoadStatus.progressFraction(load1: load.m1, performanceCores: cores.performance)
+
+        return VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    sectionHeader("gauge.medium", "Load average")
+                    Spacer()
+                    Text(status.label)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(status.color)
+                }
+                ProgressView(value: fraction)
+                    .tint(status.color)
+                // htop-style single label rather than per-number labels
+                // — the 1/5/15m order is well-established and per-number
+                // labels just add noise. The caption below explains what
+                // the raw Unix convention actually means — the numbers
+                // alone don't.
+                Text(String(format: "%.2f · %.2f · %.2f", load.m1, load.m5, load.m15))
+                    .font(.callout.weight(.bold))
+                    .foregroundStyle(status.color)
+                Text(
+                    "1/5/15 min avg — processes waiting for a CPU core, " +
+                    "relative to \(cores.performance) performance cores"
+                )
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 4) {
+                sectionHeader("shippingbox", "Docker & DDEV")
+                Text("\(report.docker.containers.count) container(s) · \(report.ddev.running.count) DDEV project(s) running")
+                    .font(.caption)
                     .foregroundStyle(.secondary)
-            } else {
+            }
+        }
+        .padding(10)
+        .background(status.color.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(status.color.opacity(0.25), lineWidth: 1)
+        )
+    }
+
+    @ViewBuilder
+    private func findingsSection(_ report: VitalsReport) -> some View {
+        if report.findings.isEmpty {
+            HStack(spacing: 6) {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                Text("All vital signs normal.")
+            }
+            .font(.callout)
+            .foregroundStyle(.secondary)
+        } else {
+            VStack(alignment: .leading, spacing: 6) {
+                sectionHeader("exclamationmark.triangle", "Findings")
                 // A Divider between rows (not around the whole group) so
                 // the list reads as one connected block instead of
                 // findings running into each other with only padding
@@ -105,70 +192,37 @@ struct MenubarView: View {
                 }
             }
         }
-        .padding(12)
     }
 
-    /// A single bordered "card" for the at-a-glance numbers — load
-    /// average (the one figure worth a bigger, bolder treatment) plus
-    /// the docker/DDEV counts as a second row, rather than the counts
-    /// floating unattached between the card and the findings list.
-    /// The background tint alone barely showed up against the window's
-    /// own vibrancy material, so a matching-color border makes the
-    /// boundary actually visible.
-    private func metricsSection(_ report: VitalsReport) -> some View {
-        let load = report.system.load
-        let cores = report.system.cores
-        let status = LoadStatus.evaluate(load1: load.m1, performanceCores: cores.performance)
-
-        return VStack(alignment: .leading, spacing: 4) {
-            // htop-style single "Load average" label rather than
-            // per-number labels — the 1/5/15m order is well-established
-            // and per-number labels just add noise. The status word
-            // (not just its color) mirrors the rule engine's own load
-            // thresholds (§5), so severity is never conveyed by color
-            // alone. The caption below explains what the raw Unix
-            // convention actually means — the numbers alone don't.
-            HStack(spacing: 6) {
-                Text("Load average")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                Text(String(format: "%.2f · %.2f · %.2f", load.m1, load.m5, load.m15))
-                    .font(.body.weight(.bold))
-                    .foregroundStyle(status.color)
-                Text(status.label)
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(status.color)
-            }
-            Text(
-                "1/5/15 min avg — processes waiting for a CPU core, " +
-                "relative to \(cores.performance) performance cores"
-            )
-            .font(.caption2)
-            .foregroundStyle(.tertiary)
-            .fixedSize(horizontal: false, vertical: true)
-
-            Divider()
-                .padding(.vertical, 2)
-
-            Text("\(report.docker.containers.count) container(s) · \(report.ddev.running.count) DDEV project(s) running")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-        .padding(10)
-        .background(status.color.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(status.color.opacity(0.25), lineWidth: 1)
-        )
-    }
-
+    /// Mirrors a common menu bar app footer pattern: refresh + "updated
+    /// Xs/m ago" on the left (so it's clear the data is live, not stale),
+    /// quit on the right.
     private var footer: some View {
         HStack {
-            Spacer()
-            Button("Quit") {
-                NSApplication.shared.terminate(nil)
+            Button {
+                Task { await appState.refresh() }
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.clockwise")
+                    if let lastUpdated = appState.lastUpdated {
+                        Text("Updated ").font(.caption) + Text(lastUpdated, style: .relative).font(.caption)
+                    } else {
+                        Text("Updating…").font(.caption)
+                    }
+                }
+                .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
+
+            Spacer()
+
+            Button {
+                NSApplication.shared.terminate(nil)
+            } label: {
+                Image(systemName: "power")
+            }
+            .buttonStyle(.plain)
+            .help("Quit Vitals")
         }
         .padding(12)
     }

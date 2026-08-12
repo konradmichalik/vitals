@@ -45,4 +45,11 @@ enum TrafficLight: Equatable {
 
         return "Vitals — \(findings.count) finding(s), highest: \(highest)"
     }
+
+    /// A short header pill (next to "Vitals" in the dropdown title,
+    /// mirroring Spark's plan-name pill next to its app name).
+    static func statusLabel(for findings: [Finding]) -> String {
+        guard !findings.isEmpty else { return "All clear" }
+        return "\(findings.count) finding\(findings.count == 1 ? "" : "s")"
+    }
 }
