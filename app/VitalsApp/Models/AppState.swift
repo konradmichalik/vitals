@@ -1,4 +1,4 @@
-import Foundation
+import SwiftUI
 
 /// Polls `vitals-ffi` on an adaptive interval (§4 sampling notes: 30s
 /// when green, 10s once a rule has fired) and republishes the result for
@@ -10,6 +10,8 @@ final class AppState: ObservableObject {
     @Published private(set) var lastError: VitalsCollectError?
     @Published private(set) var lastUpdated: Date?
 
+    @AppStorage(CriticalFindingNotifier.storageKey) private var notifyOnCritical = true
+    private var lastCriticalRules: Set<String> = []
     private var pollTask: Task<Void, Never>?
 
     nonisolated static let greenInterval: TimeInterval = 30
@@ -34,10 +36,27 @@ final class AppState: ObservableObject {
         case .success(let report):
             self.report = report
             self.lastError = nil
+            notifyAboutNewCriticalFindings(in: report.findings)
         case .failure(let error):
             self.lastError = error
         }
         lastUpdated = Date()
+    }
+
+    /// `lastCriticalRules` is updated unconditionally, even with
+    /// notifications turned off — otherwise turning them on later would
+    /// treat every already-critical finding as newly critical and fire a
+    /// notification storm for state that isn't actually new.
+    private func notifyAboutNewCriticalFindings(in findings: [Finding]) {
+        let currentCritical = CriticalFindingTransition.criticalRuleNames(in: findings)
+        let newlyCritical = CriticalFindingTransition.newlyCritical(previous: lastCriticalRules, current: currentCritical)
+        lastCriticalRules = currentCritical
+
+        guard notifyOnCritical else { return }
+        for rule in newlyCritical {
+            guard let finding = findings.first(where: { $0.rule == rule }) else { continue }
+            CriticalFindingNotifier.notify(rule: rule, message: finding.message)
+        }
     }
 
     nonisolated static func pollInterval(for report: VitalsReport?) -> TimeInterval {
