@@ -23,8 +23,14 @@ enum LoadStatus: Equatable {
 
     var color: Color {
         switch self {
-        case .normal: return .primary
-        case .warn: return .yellow
+        // Matches TrafficLight's own green-means-all-clear convention
+        // rather than staying neutral for the "nothing's wrong" case.
+        case .normal: return .green
+        // Plain system yellow reads as near-white against the light
+        // vibrancy background and fails WCAG contrast as text — orange
+        // keeps the "elevated, not critical" meaning while staying
+        // legible in both light and dark menu bar appearance.
+        case .warn: return .orange
         case .critical: return .red
         }
     }

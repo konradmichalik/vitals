@@ -25,7 +25,9 @@ enum TrafficLight: Equatable {
         switch self {
         case .green: return .green
         case .blue: return .blue
-        case .yellow: return .yellow
+        // Same contrast fix as LoadStatus: plain yellow is illegible as
+        // text (the status pill) and washes out as a small menu bar dot.
+        case .yellow: return .orange
         case .red: return .red
         }
     }
