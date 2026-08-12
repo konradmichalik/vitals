@@ -107,3 +107,35 @@ matching XCTest in `VitalsAppTests/`, written and run RED-first the same way as 
 Rust side — write the test against a stubbed body, confirm it fails for the right
 reason, then implement. `xcodebuild -project VitalsApp.xcodeproj -scheme VitalsApp test`
 (or `make test`) runs the suite; a plain build does not.
+
+`Support/CriticalFindingTransition.swift` tracks which rule names are critical between
+polls (`newlyCritical(previous:current:)`, both `Set<String>` — pure, tested); `AppState`
+notifies only on the transition *into* critical, never while it persists across the 10s
+alert-interval poll, and always updates its tracked set even with notifications turned
+off (otherwise re-enabling them later would treat every already-critical finding as new).
+`Support/CriticalFindingNotifier.swift` is the untested `UNUserNotificationCenter`
+pass-through (real side effects, same rationale as `LaunchAtLogin`); `Support/AppDelegate.swift`
+owns the permission request and delegate registration.
+
+### Code signing without an Apple Developer account
+
+This project has no Apple ID and will ship via Homebrew, not the App Store — mirroring
+`cc-usage-bar`/Spark's approach, which ships ad-hoc signed with no `DEVELOPMENT_TEAM` at
+all. `app/project.yml` sets `CODE_SIGN_IDENTITY: "-"` and `CODE_SIGNING_REQUIRED: NO`
+explicitly rather than relying on Xcode's automatic per-machine signing (which requires a
+signed-in Apple ID to mint a certificate).
+
+Two gotchas discovered getting `UNUserNotificationCenter` working under this setup:
+
+- Xcode's Debug-only "build the app as a dylib behind a stub executor" optimization
+  (faster incremental builds) breaks `UNUserNotificationCenter`'s bundle-identity
+  resolution — it crashed on every launch with "could not determine bundleIdentifier"
+  even though an identically ad-hoc-signed **Release** build ran fine. Set via
+  `ENABLE_DEBUG_DYLIB: NO` in `project.yml`.
+- Separately, `xcodebuild test` hosts the app in a process that still can't resolve a
+  bundle identity for `UNUserNotificationCenter`, regardless of the above — confirmed a
+  test-runner-only artifact by launching the same Debug/Release builds directly via
+  `open`, which never crashed. `AppDelegate` checks
+  `ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil` and skips
+  notification setup entirely under test, rather than working around the crash some
+  other way.

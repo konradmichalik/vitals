@@ -85,6 +85,13 @@ target-less actions (`poweroff`, `stop_backup`, `add_exclusions`,
 `kill_session` need a target the JSON contract doesn't carry, so they're shown as text
 only.
 
+The gear icon opens Settings: launch-at-login (via `SMAppService`, no separate helper
+app needed) and a toggle for system notifications when a finding newly becomes
+critical — never while it merely stays critical across polls.
+
+No Apple Developer account is required to build or run this app; it's ad-hoc signed
+(see `docs/DEVELOPMENT.md`).
+
 ## License
 
 MIT
