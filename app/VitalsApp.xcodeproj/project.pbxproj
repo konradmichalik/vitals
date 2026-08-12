@@ -15,16 +15,20 @@
 		59B3B6D481EEE140ABBD0ECD /* LoadStatusTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75DB8D816C0B6F41015C9E9F /* LoadStatusTests.swift */; };
 		5F62DD754678080D18864B3E /* MenubarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E823D3AF77CF0929A8096C7 /* MenubarView.swift */; };
 		9A26222C27D491DEBE3ED44C /* SeverityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD3595400A49D7BED6DA09D8 /* SeverityTests.swift */; };
+		A48980376FEEB8C1202F602D /* CriticalFindingNotifier.swift in Sources */ = {isa = PBXBuildFile; fileRef = AFC6868B00CAC08DB50A3FF0 /* CriticalFindingNotifier.swift */; };
+		A8B75056BB33A490AF247281 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCB2D98E1F46D81928FDBFEC /* AppDelegate.swift */; };
 		AB32AD88721AB790610BE73A /* VitalsBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 566229B483107F02FF8B4096 /* VitalsBridge.swift */; };
 		AFEB5BA7566E8294F02A0C6A /* SeverityBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90B864952B8B1DD13CCB985A /* SeverityBadge.swift */; };
 		B0E613EAA7BF5A5773AA7BFA /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A972740A8FC992B5AAA8F2A3 /* SettingsView.swift */; };
 		B15B8D4F6B3381D0BAF45444 /* VitalsBridgeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53842BF261788B3DB58E213A /* VitalsBridgeTests.swift */; };
+		B3C3BA0E4A9D699745CB0E75 /* CriticalFindingTransitionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D52084FBD1CC3BFD1E4CF0CB /* CriticalFindingTransitionTests.swift */; };
 		BC90A7CEA4FD4A22735721B8 /* VitalsReport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 290BA3662BC799B918787937 /* VitalsReport.swift */; };
 		C79937B3ACF6F507267641DF /* LaunchAtLogin.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAD560573ED4211A14D76800 /* LaunchAtLogin.swift */; };
 		C98FDD842A92DC90F49321DC /* LoadStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5CCE0871B1D9C24F8340D57 /* LoadStatus.swift */; };
 		D19D72DAE9BB4FA1B850190D /* VitalsApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B2439323627621091AF275C /* VitalsApp.swift */; };
 		DCFC3D3AFFC7198ED70FA1F4 /* TrafficLightTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29004B98A4F3CE2DFFF39055 /* TrafficLightTests.swift */; };
 		DF0F98DBA5F0017132E42371 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6CF9C0ADDB9F00B30E3C83D7 /* AppState.swift */; };
+		E32F531331CE631E907065FF /* CriticalFindingTransition.swift in Sources */ = {isa = PBXBuildFile; fileRef = B109AF9EBF3C13860E771E8D /* CriticalFindingTransition.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -56,11 +60,15 @@
 		A972740A8FC992B5AAA8F2A3 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		AAD560573ED4211A14D76800 /* LaunchAtLogin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchAtLogin.swift; sourceTree = "<group>"; };
 		AD3595400A49D7BED6DA09D8 /* SeverityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeverityTests.swift; sourceTree = "<group>"; };
+		AFC6868B00CAC08DB50A3FF0 /* CriticalFindingNotifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CriticalFindingNotifier.swift; sourceTree = "<group>"; };
+		B109AF9EBF3C13860E771E8D /* CriticalFindingTransition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CriticalFindingTransition.swift; sourceTree = "<group>"; };
 		B5CCE0871B1D9C24F8340D57 /* LoadStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoadStatus.swift; sourceTree = "<group>"; };
 		C49F095F7E511E95AD528985 /* VitalsApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = VitalsApp.entitlements; sourceTree = "<group>"; };
 		C5C098FCEF074EC7901E2DAC /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		D52084FBD1CC3BFD1E4CF0CB /* CriticalFindingTransitionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CriticalFindingTransitionTests.swift; sourceTree = "<group>"; };
 		E8AAEA7399780C2F77947EF3 /* FindingRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FindingRow.swift; sourceTree = "<group>"; };
 		FC5BE18C3CF3F147BF68642D /* TrafficLight.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrafficLight.swift; sourceTree = "<group>"; };
+		FCB2D98E1F46D81928FDBFEC /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -68,6 +76,9 @@
 			isa = PBXGroup;
 			children = (
 				637F9BCDC897949A2C32F6C1 /* ActionRunner.swift */,
+				FCB2D98E1F46D81928FDBFEC /* AppDelegate.swift */,
+				AFC6868B00CAC08DB50A3FF0 /* CriticalFindingNotifier.swift */,
+				B109AF9EBF3C13860E771E8D /* CriticalFindingTransition.swift */,
 				AAD560573ED4211A14D76800 /* LaunchAtLogin.swift */,
 				B5CCE0871B1D9C24F8340D57 /* LoadStatus.swift */,
 				FC5BE18C3CF3F147BF68642D /* TrafficLight.swift */,
@@ -80,6 +91,7 @@
 			children = (
 				8B3016AB01E66627C6A411B3 /* ActionRunnerTests.swift */,
 				55C780348E2A0DDD27BF8038 /* AppStateTests.swift */,
+				D52084FBD1CC3BFD1E4CF0CB /* CriticalFindingTransitionTests.swift */,
 				75DB8D816C0B6F41015C9E9F /* LoadStatusTests.swift */,
 				AD3595400A49D7BED6DA09D8 /* SeverityTests.swift */,
 				29004B98A4F3CE2DFFF39055 /* TrafficLightTests.swift */,
@@ -196,6 +208,12 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = YES;
 				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					19C528E1B97D3FF88400D999 = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Manual;
+					};
+				};
 			};
 			buildConfigurationList = E554B082CF9D307EC71D1263 /* Build configuration list for PBXProject "VitalsApp" */;
 			compatibilityVersion = "Xcode 14.0";
@@ -245,7 +263,10 @@
 			buildActionMask = 2147483647;
 			files = (
 				08F590A7B05AAD20A2EDE411 /* ActionRunner.swift in Sources */,
+				A8B75056BB33A490AF247281 /* AppDelegate.swift in Sources */,
 				DF0F98DBA5F0017132E42371 /* AppState.swift in Sources */,
+				A48980376FEEB8C1202F602D /* CriticalFindingNotifier.swift in Sources */,
+				E32F531331CE631E907065FF /* CriticalFindingTransition.swift in Sources */,
 				184834EDFF3FB85C4F43D827 /* FindingRow.swift in Sources */,
 				C79937B3ACF6F507267641DF /* LaunchAtLogin.swift in Sources */,
 				C98FDD842A92DC90F49321DC /* LoadStatus.swift in Sources */,
@@ -265,6 +286,7 @@
 			files = (
 				4C3EF871D1D6689C2AC646D0 /* ActionRunnerTests.swift in Sources */,
 				22E23D6F0B3CC64C2E56FC9C /* AppStateTests.swift in Sources */,
+				B3C3BA0E4A9D699745CB0E75 /* CriticalFindingTransitionTests.swift in Sources */,
 				59B3B6D481EEE140ABBD0ECD /* LoadStatusTests.swift in Sources */,
 				9A26222C27D491DEBE3ED44C /* SeverityTests.swift in Sources */,
 				DCFC3D3AFFC7198ED70FA1F4 /* TrafficLightTests.swift in Sources */,
@@ -287,9 +309,14 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGNING_REQUIRED = NO;
 				CODE_SIGN_ENTITLEMENTS = VitalsApp/VitalsApp.entitlements;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_DEBUG_DYLIB = NO;
 				HEADER_SEARCH_PATHS = "$(PROJECT_DIR)/VitalsApp/Bridge";
 				INFOPLIST_FILE = VitalsApp/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -311,9 +338,14 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGNING_REQUIRED = NO;
 				CODE_SIGN_ENTITLEMENTS = VitalsApp/VitalsApp.entitlements;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
 				COMBINE_HIDPI_IMAGES = YES;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_DEBUG_DYLIB = NO;
 				HEADER_SEARCH_PATHS = "$(PROJECT_DIR)/VitalsApp/Bridge";
 				INFOPLIST_FILE = VitalsApp/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
