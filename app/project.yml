@@ -20,6 +20,23 @@ targets:
         SWIFT_VERSION: "6.0"
         INFOPLIST_FILE: VitalsApp/Info.plist
         CODE_SIGN_ENTITLEMENTS: VitalsApp/VitalsApp.entitlements
+        # No Apple Developer account exists for this project — matching
+        # cc-usage-bar's approach (see its CI release workflow), which
+        # ships ad-hoc signed with no DEVELOPMENT_TEAM at all. Ad-hoc
+        # ("-") gives UNUserNotificationCenter a resolvable identity;
+        # Xcode's own "Sign to Run Locally" default does not, which is
+        # what caused the earlier crash.
+        CODE_SIGN_STYLE: Manual
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGNING_REQUIRED: NO
+        DEVELOPMENT_TEAM: ""
+        # Xcode's Debug-only "build the app as a dylib behind a stub
+        # executor" optimization (for faster incremental builds) breaks
+        # UNUserNotificationCenter's bundle-identity resolution — it
+        # crashed on every launch in Debug while an identically-signed
+        # Release build ran fine. Disabling it makes Debug behave like a
+        # normal, real app launch.
+        ENABLE_DEBUG_DYLIB: NO
         # vitals-ffi is a member of the root Cargo workspace, so its build
         # output lands in the shared workspace target/, not a local one.
         LIBRARY_SEARCH_PATHS: "$(PROJECT_DIR)/../target/release"
