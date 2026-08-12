@@ -7,8 +7,12 @@
   documented in each probe module's doc comment.
 - `cli/` — the `vitals` binary. Flag parsing and output formatting only; no probe
   logic lives here.
-- `app/` — SwiftUI menubar shell, added at v0.4. Links `vitals-core` via an FFI
-  bridge rather than shelling out to the `vitals` binary.
+- `app/` — SwiftUI menubar shell (v0.4). `app/vitals-ffi` (a root-workspace Cargo
+  member) links `vitals-core` directly and exposes it to Swift via a C ABI, rather than
+  shelling out to the `vitals` binary — avoids double parsing and binary path
+  resolution. `app/VitalsApp` is the SwiftUI target; `app/VitalsAppTests` its XCTest
+  target. `app/project.yml` is the XcodeGen source of truth — never hand-edit
+  `VitalsApp.xcodeproj`, regenerate it with `xcodegen generate` (or `make xcode`).
 
 ## Commands
 
@@ -63,4 +67,37 @@ a field without a default.
 `core/src/actions.rs` defines the `Action` enum from §9 and its `describe()` (pure,
 used for `--dry-run` and confirmation prompts) and `execute()` (shells out for real).
 The CLI (`cli/src/main.rs`) owns confirmation and `--target` parsing; `core` never
-prompts or reads stdin.
+prompts or reads stdin. `vitals --fix <action> --yes` skips the interactive y/N prompt
+— used by the menubar app after its own native confirmation dialog.
+
+## Menubar app (app/)
+
+`app/vitals-ffi/src/lib.rs` exposes exactly two `#[no_mangle] extern "C"` functions:
+`vitals_collect()` (runs `report::collect` + `rules::evaluate`, returns the same JSON
+shape as `vitals --json`, including the `{"schemaVersion":...,"error":...}` failure
+form) and `vitals_free_string()` (the caller must free every string `vitals_collect`
+returns). `build.rs` runs `cbindgen` on every build, writing the header straight to
+`VitalsApp/Bridge/vitals.h` — generated, gitignored, excluded from SwiftLint, never
+hand-edited.
+
+Swift-side structure:
+- `Models/VitalsReport.swift` — `Codable` structs mirroring the JSON contract 1:1
+  (property names match the JSON's camelCase keys, so no `CodingKeys` needed).
+- `Bridge/VitalsBridge.swift` — `collect()` calls the FFI; `decode(_:)` is the pure,
+  independently-testable JSON-handling half (tries `VitalsReport` first, falls back to
+  the API-error shape, then `.malformed`).
+- `Models/AppState.swift` — polls on an adaptive interval (`pollInterval(for:)`, pure:
+  30s green / 10s once any rule has fired, per §4's sampling notes). `@MainActor` on
+  the whole class means its pure static members must be marked `nonisolated` or Swift 6
+  strict concurrency won't let synchronous test code call them.
+- `Support/ActionRunner.swift` — `buildArguments(action:target:)` is pure (always
+  appends `--yes`); `run()` shells out to the located `vitals` binary via `Process`.
+- `Support/TrafficLight.swift` — `from(findings:)` derives the icon color from the
+  highest-severity finding (green when none fire).
+
+Every pure function above (`decode`, `pollInterval`, `buildArguments`,
+`locateVitalsBinary`, `TrafficLight.from`, `Severity`'s `Comparable` conformance) has a
+matching XCTest in `VitalsAppTests/`, written and run RED-first the same way as the
+Rust side — write the test against a stubbed body, confirm it fails for the right
+reason, then implement. `xcodebuild -project VitalsApp.xcodeproj -scheme VitalsApp test`
+(or `make test`) runs the suite; a plain build does not.

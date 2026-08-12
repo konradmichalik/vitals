@@ -30,6 +30,11 @@ struct Cli {
     /// Show what an action would do without executing it
     #[arg(long)]
     dry_run: bool,
+
+    /// Skip the confirmation prompt (e.g. when a caller like the menubar
+    /// app already confirmed via its own dialog)
+    #[arg(short = 'y', long)]
+    yes: bool,
 }
 
 fn main() -> ExitCode {
@@ -49,6 +54,7 @@ fn main() -> ExitCode {
             action_name,
             cli.target.as_deref(),
             cli.dry_run,
+            cli.yes,
             &config,
             cli.json,
             use_color,
@@ -79,6 +85,7 @@ fn run_fix(
     action_name: &str,
     target: Option<&str>,
     dry_run: bool,
+    yes: bool,
     config: &Config,
     json: bool,
     use_color: bool,
@@ -108,7 +115,7 @@ fn run_fix(
         return ExitCode::SUCCESS;
     }
 
-    if config.actions.require_confirmation && !confirm(&action) {
+    if needs_confirmation(yes, config.actions.require_confirmation) && !confirm(&action) {
         println!("Aborted.");
         return ExitCode::SUCCESS;
     }
@@ -123,6 +130,10 @@ fn run_fix(
             ExitCode::FAILURE
         }
     }
+}
+
+fn needs_confirmation(yes: bool, require_confirmation: bool) -> bool {
+    !yes && require_confirmation
 }
 
 fn confirm(action: &Action) -> bool {
@@ -316,6 +327,21 @@ mod tests {
         AcpAgent, CoreCount, DdevInfo, DockerInfo, LoadAverage, MemoryInfo, PressureLevel,
         ProcessesInfo, SystemInfo, TimeMachineInfo,
     };
+
+    #[test]
+    fn needs_confirmation_when_config_requires_it_and_yes_not_passed() {
+        assert!(needs_confirmation(false, true));
+    }
+
+    #[test]
+    fn skips_confirmation_when_yes_flag_passed() {
+        assert!(!needs_confirmation(true, true));
+    }
+
+    #[test]
+    fn skips_confirmation_when_config_disables_it() {
+        assert!(!needs_confirmation(false, false));
+    }
 
     fn sample_report(findings: Vec<Finding>) -> VitalsReport {
         VitalsReport {

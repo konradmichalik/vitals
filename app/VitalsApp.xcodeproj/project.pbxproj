@@ -1,0 +1,506 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		08F590A7B05AAD20A2EDE411 /* ActionRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = 637F9BCDC897949A2C32F6C1 /* ActionRunner.swift */; };
+		184834EDFF3FB85C4F43D827 /* FindingRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8AAEA7399780C2F77947EF3 /* FindingRow.swift */; };
+		1BBF35268C2297D03C00849F /* TrafficLight.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC5BE18C3CF3F147BF68642D /* TrafficLight.swift */; };
+		22E23D6F0B3CC64C2E56FC9C /* AppStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55C780348E2A0DDD27BF8038 /* AppStateTests.swift */; };
+		4C3EF871D1D6689C2AC646D0 /* ActionRunnerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B3016AB01E66627C6A411B3 /* ActionRunnerTests.swift */; };
+		5F62DD754678080D18864B3E /* MenubarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E823D3AF77CF0929A8096C7 /* MenubarView.swift */; };
+		9A26222C27D491DEBE3ED44C /* SeverityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD3595400A49D7BED6DA09D8 /* SeverityTests.swift */; };
+		AB32AD88721AB790610BE73A /* VitalsBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 566229B483107F02FF8B4096 /* VitalsBridge.swift */; };
+		AFEB5BA7566E8294F02A0C6A /* SeverityBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90B864952B8B1DD13CCB985A /* SeverityBadge.swift */; };
+		B15B8D4F6B3381D0BAF45444 /* VitalsBridgeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 53842BF261788B3DB58E213A /* VitalsBridgeTests.swift */; };
+		BC90A7CEA4FD4A22735721B8 /* VitalsReport.swift in Sources */ = {isa = PBXBuildFile; fileRef = 290BA3662BC799B918787937 /* VitalsReport.swift */; };
+		D19D72DAE9BB4FA1B850190D /* VitalsApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B2439323627621091AF275C /* VitalsApp.swift */; };
+		DCFC3D3AFFC7198ED70FA1F4 /* TrafficLightTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29004B98A4F3CE2DFFF39055 /* TrafficLightTests.swift */; };
+		DF0F98DBA5F0017132E42371 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6CF9C0ADDB9F00B30E3C83D7 /* AppState.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		A58EC7BD01EE9537DBD83D68 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 0192474FB8199A1C2FFBB06E /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 19C528E1B97D3FF88400D999;
+			remoteInfo = VitalsApp;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		29004B98A4F3CE2DFFF39055 /* TrafficLightTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrafficLightTests.swift; sourceTree = "<group>"; };
+		290BA3662BC799B918787937 /* VitalsReport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VitalsReport.swift; sourceTree = "<group>"; };
+		2B2439323627621091AF275C /* VitalsApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VitalsApp.swift; sourceTree = "<group>"; };
+		3E823D3AF77CF0929A8096C7 /* MenubarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenubarView.swift; sourceTree = "<group>"; };
+		53842BF261788B3DB58E213A /* VitalsBridgeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VitalsBridgeTests.swift; sourceTree = "<group>"; };
+		54722C75CF2FDCEEF41B8811 /* VitalsApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VitalsApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		55C780348E2A0DDD27BF8038 /* AppStateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStateTests.swift; sourceTree = "<group>"; };
+		566229B483107F02FF8B4096 /* VitalsBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VitalsBridge.swift; sourceTree = "<group>"; };
+		637F9BCDC897949A2C32F6C1 /* ActionRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionRunner.swift; sourceTree = "<group>"; };
+		69E1B94B0D5C41AA47143FE7 /* vitals.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = vitals.h; sourceTree = "<group>"; };
+		6CF9C0ADDB9F00B30E3C83D7 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
+		8B3016AB01E66627C6A411B3 /* ActionRunnerTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionRunnerTests.swift; sourceTree = "<group>"; };
+		90B864952B8B1DD13CCB985A /* SeverityBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeverityBadge.swift; sourceTree = "<group>"; };
+		98643A10C0C6FB6A442D808C /* VitalsAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VitalsAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		AD3595400A49D7BED6DA09D8 /* SeverityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeverityTests.swift; sourceTree = "<group>"; };
+		C49F095F7E511E95AD528985 /* VitalsApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = VitalsApp.entitlements; sourceTree = "<group>"; };
+		C5C098FCEF074EC7901E2DAC /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		E8AAEA7399780C2F77947EF3 /* FindingRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FindingRow.swift; sourceTree = "<group>"; };
+		FC5BE18C3CF3F147BF68642D /* TrafficLight.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrafficLight.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		03982D87335BD4CE11EDC467 /* Support */ = {
+			isa = PBXGroup;
+			children = (
+				637F9BCDC897949A2C32F6C1 /* ActionRunner.swift */,
+				FC5BE18C3CF3F147BF68642D /* TrafficLight.swift */,
+			);
+			path = Support;
+			sourceTree = "<group>";
+		};
+		05709149F3873377DC53369E /* VitalsAppTests */ = {
+			isa = PBXGroup;
+			children = (
+				8B3016AB01E66627C6A411B3 /* ActionRunnerTests.swift */,
+				55C780348E2A0DDD27BF8038 /* AppStateTests.swift */,
+				AD3595400A49D7BED6DA09D8 /* SeverityTests.swift */,
+				29004B98A4F3CE2DFFF39055 /* TrafficLightTests.swift */,
+				53842BF261788B3DB58E213A /* VitalsBridgeTests.swift */,
+			);
+			path = VitalsAppTests;
+			sourceTree = "<group>";
+		};
+		28907DDA6EE0545531EFA27A /* Bridge */ = {
+			isa = PBXGroup;
+			children = (
+				69E1B94B0D5C41AA47143FE7 /* vitals.h */,
+				566229B483107F02FF8B4096 /* VitalsBridge.swift */,
+			);
+			path = Bridge;
+			sourceTree = "<group>";
+		};
+		3F94B929E4A0C9AF95D29CC8 /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				6CF9C0ADDB9F00B30E3C83D7 /* AppState.swift */,
+				290BA3662BC799B918787937 /* VitalsReport.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		5F1AB3634642D84C2E04FBE5 /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				E8AAEA7399780C2F77947EF3 /* FindingRow.swift */,
+				3E823D3AF77CF0929A8096C7 /* MenubarView.swift */,
+				90B864952B8B1DD13CCB985A /* SeverityBadge.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		64E54F465635E66E8A585B4B /* VitalsApp */ = {
+			isa = PBXGroup;
+			children = (
+				C5C098FCEF074EC7901E2DAC /* Info.plist */,
+				C49F095F7E511E95AD528985 /* VitalsApp.entitlements */,
+				2B2439323627621091AF275C /* VitalsApp.swift */,
+				28907DDA6EE0545531EFA27A /* Bridge */,
+				3F94B929E4A0C9AF95D29CC8 /* Models */,
+				03982D87335BD4CE11EDC467 /* Support */,
+				5F1AB3634642D84C2E04FBE5 /* Views */,
+			);
+			path = VitalsApp;
+			sourceTree = "<group>";
+		};
+		8B41D025B1248C5EFF9BAA33 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				54722C75CF2FDCEEF41B8811 /* VitalsApp.app */,
+				98643A10C0C6FB6A442D808C /* VitalsAppTests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		92AC3F20DB89CED42EA31264 = {
+			isa = PBXGroup;
+			children = (
+				64E54F465635E66E8A585B4B /* VitalsApp */,
+				05709149F3873377DC53369E /* VitalsAppTests */,
+				8B41D025B1248C5EFF9BAA33 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		19C528E1B97D3FF88400D999 /* VitalsApp */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AA72BA2BC6BBD04450E12183 /* Build configuration list for PBXNativeTarget "VitalsApp" */;
+			buildPhases = (
+				2FA5563F2FEED81F8428A687 /* Build Rust FFI */,
+				8BBBBB46DCBD957AB670245A /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = VitalsApp;
+			packageProductDependencies = (
+			);
+			productName = VitalsApp;
+			productReference = 54722C75CF2FDCEEF41B8811 /* VitalsApp.app */;
+			productType = "com.apple.product-type.application";
+		};
+		203F17FEFE7C2F6FE0363DB5 /* VitalsAppTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AD1FC74905CF19E6A72661DA /* Build configuration list for PBXNativeTarget "VitalsAppTests" */;
+			buildPhases = (
+				EA54907AD31C665DD9FD6DAD /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				4AE9F6B6AF8399C878E59D9E /* PBXTargetDependency */,
+			);
+			name = VitalsAppTests;
+			packageProductDependencies = (
+			);
+			productName = VitalsAppTests;
+			productReference = 98643A10C0C6FB6A442D808C /* VitalsAppTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		0192474FB8199A1C2FFBB06E /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1600;
+			};
+			buildConfigurationList = E554B082CF9D307EC71D1263 /* Build configuration list for PBXProject "VitalsApp" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 92AC3F20DB89CED42EA31264;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				19C528E1B97D3FF88400D999 /* VitalsApp */,
+				203F17FEFE7C2F6FE0363DB5 /* VitalsAppTests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		2FA5563F2FEED81F8428A687 /* Build Rust FFI */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Build Rust FFI";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "export PATH=\"$HOME/.cargo/bin:$PATH\"\ncd \"$PROJECT_DIR/..\"\ncargo build --release -p vitals-ffi 2>&1\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		8BBBBB46DCBD957AB670245A /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				08F590A7B05AAD20A2EDE411 /* ActionRunner.swift in Sources */,
+				DF0F98DBA5F0017132E42371 /* AppState.swift in Sources */,
+				184834EDFF3FB85C4F43D827 /* FindingRow.swift in Sources */,
+				5F62DD754678080D18864B3E /* MenubarView.swift in Sources */,
+				AFEB5BA7566E8294F02A0C6A /* SeverityBadge.swift in Sources */,
+				1BBF35268C2297D03C00849F /* TrafficLight.swift in Sources */,
+				D19D72DAE9BB4FA1B850190D /* VitalsApp.swift in Sources */,
+				AB32AD88721AB790610BE73A /* VitalsBridge.swift in Sources */,
+				BC90A7CEA4FD4A22735721B8 /* VitalsReport.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		EA54907AD31C665DD9FD6DAD /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4C3EF871D1D6689C2AC646D0 /* ActionRunnerTests.swift in Sources */,
+				22E23D6F0B3CC64C2E56FC9C /* AppStateTests.swift in Sources */,
+				9A26222C27D491DEBE3ED44C /* SeverityTests.swift in Sources */,
+				DCFC3D3AFFC7198ED70FA1F4 /* TrafficLightTests.swift in Sources */,
+				B15B8D4F6B3381D0BAF45444 /* VitalsBridgeTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		4AE9F6B6AF8399C878E59D9E /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 19C528E1B97D3FF88400D999 /* VitalsApp */;
+			targetProxy = A58EC7BD01EE9537DBD83D68 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		022C3EBD278344ADD62D1279 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = VitalsApp/VitalsApp.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				HEADER_SEARCH_PATHS = "$(PROJECT_DIR)/VitalsApp/Bridge";
+				INFOPLIST_FILE = VitalsApp/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				LIBRARY_SEARCH_PATHS = "$(PROJECT_DIR)/../target/release";
+				MARKETING_VERSION = 0.4.0;
+				OTHER_LDFLAGS = "-lvitals_ffi";
+				PRODUCT_BUNDLE_IDENTIFIER = com.konradmichalik.vitals;
+				PRODUCT_NAME = VitalsApp;
+				SDKROOT = macosx;
+				SWIFT_OBJC_BRIDGING_HEADER = VitalsApp/Bridge/vitals.h;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		13A93CBE1FE6C68C04FCF2F5 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = VitalsApp/VitalsApp.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				HEADER_SEARCH_PATHS = "$(PROJECT_DIR)/VitalsApp/Bridge";
+				INFOPLIST_FILE = VitalsApp/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				LIBRARY_SEARCH_PATHS = "$(PROJECT_DIR)/../target/release";
+				MARKETING_VERSION = 0.4.0;
+				OTHER_LDFLAGS = "-lvitals_ffi";
+				PRODUCT_BUNDLE_IDENTIFIER = com.konradmichalik.vitals;
+				PRODUCT_NAME = VitalsApp;
+				SDKROOT = macosx;
+				SWIFT_OBJC_BRIDGING_HEADER = VitalsApp/Bridge/vitals.h;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		478E1A7726B944432FBC229C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.konradmichalik.vitals.tests;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 6.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/VitalsApp.app/Contents/MacOS/VitalsApp";
+			};
+			name = Release;
+		};
+		5DC1211BB2A551C3D022C01E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		8300BD2C6ACF1B2B7675CF8A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				COMBINE_HIDPI_IMAGES = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.konradmichalik.vitals.tests;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 6.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/VitalsApp.app/Contents/MacOS/VitalsApp";
+			};
+			name = Debug;
+		};
+		F533BC8C1E020B34DECCF4AA /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		AA72BA2BC6BBD04450E12183 /* Build configuration list for PBXNativeTarget "VitalsApp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				022C3EBD278344ADD62D1279 /* Debug */,
+				13A93CBE1FE6C68C04FCF2F5 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		AD1FC74905CF19E6A72661DA /* Build configuration list for PBXNativeTarget "VitalsAppTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				8300BD2C6ACF1B2B7675CF8A /* Debug */,
+				478E1A7726B944432FBC229C /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		E554B082CF9D307EC71D1263 /* Build configuration list for PBXProject "VitalsApp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5DC1211BB2A551C3D022C01E /* Debug */,
+				F533BC8C1E020B34DECCF4AA /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 0192474FB8199A1C2FFBB06E /* Project object */;
+}

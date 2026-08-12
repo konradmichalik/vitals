@@ -9,8 +9,8 @@ Existing monitors (Stats, iStat Menus, OrbStack's own UI) show *metrics*. Vitals
 
 ## Status
 
-Early development (v0.1–v0.3 — probes, rule engine, config, actions). Not yet
-published or installable via Homebrew.
+Early development (v0.1–v0.4 — probes, rule engine, config, actions, menubar app). Not
+yet published or installable via Homebrew.
 
 ## Architecture
 
@@ -18,7 +18,8 @@ Single Cargo workspace:
 
 - `core/` — `vitals-core`: probes, parsing, and the rule engine (macOS-only)
 - `cli/` — the `vitals` binary
-- `app/` — SwiftUI menubar app (planned, v0.4)
+- `app/` — SwiftUI menubar app, linking `vitals-core` via the `vitals-ffi` bridge
+  (workspace member) rather than shelling out to the `vitals` binary
 
 ## Building
 
@@ -64,6 +65,23 @@ is set in the config (not recommended) — see §9 of the concept doc. There is 
 
 `~/.vitals.toml` (optional, all fields optional). CLI arguments take precedence over
 config values. See `docs/DEVELOPMENT.md` for the full schema.
+
+## Menubar app
+
+```sh
+cd app
+make build   # xcodegen generate + cargo build (vitals-ffi) + xcodebuild
+make test    # Swift unit tests
+make lint    # SwiftLint + cargo fmt/clippy for vitals-ffi
+```
+
+Traffic-light icon (green/yellow/red, from the highest-severity finding) with a
+dropdown listing metrics and findings. Actions run through the installed `vitals`
+binary (`Process` + `--fix <action> --yes`, after the app's own confirmation dialog) —
+`core` never prompts or reads stdin; only the CLI does, and only without `--yes`. Only
+target-less actions (`poweroff`, `stop_backup`, `add_exclusions`,
+`kill_orphaned_agents`) get a "Run" button; `stop_project`/`kill_session` need a target
+the JSON contract doesn't carry, so they're shown as text only.
 
 ## License
 

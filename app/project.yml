@@ -1,0 +1,62 @@
+name: VitalsApp
+options:
+  bundleIdPrefix: com.konradmichalik
+  deploymentTarget:
+    macOS: "14.0"
+  xcodeVersion: "16.0"
+
+targets:
+  VitalsApp:
+    type: application
+    platform: macOS
+    sources:
+      - VitalsApp
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.konradmichalik.vitals
+        PRODUCT_NAME: VitalsApp
+        MARKETING_VERSION: "0.4.0"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "6.0"
+        INFOPLIST_FILE: VitalsApp/Info.plist
+        CODE_SIGN_ENTITLEMENTS: VitalsApp/VitalsApp.entitlements
+        # vitals-ffi is a member of the root Cargo workspace, so its build
+        # output lands in the shared workspace target/, not a local one.
+        LIBRARY_SEARCH_PATHS: "$(PROJECT_DIR)/../target/release"
+        HEADER_SEARCH_PATHS: "$(PROJECT_DIR)/VitalsApp/Bridge"
+        OTHER_LDFLAGS: "-lvitals_ffi"
+        SWIFT_OBJC_BRIDGING_HEADER: "VitalsApp/Bridge/vitals.h"
+
+    preBuildScripts:
+      - name: Build Rust FFI
+        script: |
+          export PATH="$HOME/.cargo/bin:$PATH"
+          cd "$PROJECT_DIR/.."
+          cargo build --release -p vitals-ffi 2>&1
+        basedOnDependencyAnalysis: false
+
+  VitalsAppTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - VitalsAppTests
+    dependencies:
+      - target: VitalsApp
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.konradmichalik.vitals.tests
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: "6.0"
+
+schemes:
+  VitalsApp:
+    build:
+      targets:
+        VitalsApp: all
+        VitalsAppTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - VitalsAppTests

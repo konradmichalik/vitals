@@ -1,0 +1,21 @@
+[package]
+name = "vitals-ffi"
+version = "0.1.0"
+edition = "2021"
+description = "C-compatible FFI bindings for vitals-core"
+
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+vitals-core = { path = "../../core" }
+serde_json = "1"
+
+[build-dependencies]
+cbindgen = "0.28"
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "warn"
+todo = "deny"
+dbg_macro = "warn"
