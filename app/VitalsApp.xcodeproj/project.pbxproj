@@ -11,7 +11,6 @@
 		184834EDFF3FB85C4F43D827 /* FindingRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = E8AAEA7399780C2F77947EF3 /* FindingRow.swift */; };
 		1BBF35268C2297D03C00849F /* TrafficLight.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC5BE18C3CF3F147BF68642D /* TrafficLight.swift */; };
 		22E23D6F0B3CC64C2E56FC9C /* AppStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55C780348E2A0DDD27BF8038 /* AppStateTests.swift */; };
-		3C14038D595DDBA3C3D02A6D /* VitalsMark.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BD8A6D1A01C9F0CC65B26FD /* VitalsMark.swift */; };
 		4C3EF871D1D6689C2AC646D0 /* ActionRunnerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B3016AB01E66627C6A411B3 /* ActionRunnerTests.swift */; };
 		59B3B6D481EEE140ABBD0ECD /* LoadStatusTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 75DB8D816C0B6F41015C9E9F /* LoadStatusTests.swift */; };
 		5F62DD754678080D18864B3E /* MenubarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E823D3AF77CF0929A8096C7 /* MenubarView.swift */; };
@@ -40,7 +39,6 @@
 		29004B98A4F3CE2DFFF39055 /* TrafficLightTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrafficLightTests.swift; sourceTree = "<group>"; };
 		290BA3662BC799B918787937 /* VitalsReport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VitalsReport.swift; sourceTree = "<group>"; };
 		2B2439323627621091AF275C /* VitalsApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VitalsApp.swift; sourceTree = "<group>"; };
-		2BD8A6D1A01C9F0CC65B26FD /* VitalsMark.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VitalsMark.swift; sourceTree = "<group>"; };
 		3E823D3AF77CF0929A8096C7 /* MenubarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenubarView.swift; sourceTree = "<group>"; };
 		53842BF261788B3DB58E213A /* VitalsBridgeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VitalsBridgeTests.swift; sourceTree = "<group>"; };
 		54722C75CF2FDCEEF41B8811 /* VitalsApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = VitalsApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -68,7 +66,6 @@
 				637F9BCDC897949A2C32F6C1 /* ActionRunner.swift */,
 				B5CCE0871B1D9C24F8340D57 /* LoadStatus.swift */,
 				FC5BE18C3CF3F147BF68642D /* TrafficLight.swift */,
-				2BD8A6D1A01C9F0CC65B26FD /* VitalsMark.swift */,
 			);
 			path = Support;
 			sourceTree = "<group>";
@@ -250,7 +247,6 @@
 				1BBF35268C2297D03C00849F /* TrafficLight.swift in Sources */,
 				D19D72DAE9BB4FA1B850190D /* VitalsApp.swift in Sources */,
 				AB32AD88721AB790610BE73A /* VitalsBridge.swift in Sources */,
-				3C14038D595DDBA3C3D02A6D /* VitalsMark.swift in Sources */,
 				BC90A7CEA4FD4A22735721B8 /* VitalsReport.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

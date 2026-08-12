@@ -9,22 +9,23 @@ struct VitalsApp: App {
             MenubarView()
                 .environmentObject(appState)
         } label: {
-            // Plain SwiftUI shapes (not an SF Symbol `Image`) so macOS
-            // doesn't auto-tint everything to monochrome "template" style
-            // — that would silently defeat the color-coded severity badge.
-            // The mark itself uses `.primary` so it still reads as a
-            // normal black/white menu bar icon in both appearances; only
-            // the small corner badge carries color.
+            // The custom pulse mark (VitalsMark) turned out unreadable at
+            // menu bar size — its cutout details are too fine and just
+            // looked like a plain dot. An SF Symbol is the right tool
+            // here: it's designed to stay legible this small, and macOS
+            // auto-tinting it to monochrome "template" style is exactly
+            // what we want for the base glyph (matches every other menu
+            // bar icon). Only the badge below needs to stay colored,
+            // and it's a plain Shape — those are never auto-templated.
             ZStack(alignment: .topTrailing) {
-                VitalsMark()
-                    .fill(.primary, style: FillStyle(eoFill: true))
-                    .frame(width: 16, height: 16)
+                Image(systemName: "waveform.path.ecg")
+                    .font(.system(size: 14, weight: .semibold))
                 Circle()
                     .fill(TrafficLight.from(findings: appState.report?.findings ?? []).color)
-                    .frame(width: 7, height: 7)
-                    .offset(x: 2, y: -2)
+                    .frame(width: 8, height: 8)
+                    .offset(x: 4, y: -4)
             }
-            .frame(width: 20, height: 18)
+            .frame(width: 22, height: 18)
         }
         .menuBarExtraStyle(.window)
     }
