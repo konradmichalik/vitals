@@ -38,11 +38,11 @@ vitals --no-color
 # exit code reflects the highest-severity finding: 0 none/info, 1 warn, 2 critical
 ```
 
-Findings come from the rule engine (9 rules — Time Machine scanning container data,
+Findings come from the rule engine (10 rules — Time Machine scanning container data,
 container load, Mutagen activity, memory ballast, orphaned PhpStorm ACP agents, stale
-Claude Code sessions, DDEV projects in a problem state, unexcluded backup paths, and
-Docker containers running outside DDEV's management, e.g. a plain `docker compose up`
-project).
+Claude Code sessions, DDEV projects in a problem state, unexcluded backup paths, Docker
+containers running outside DDEV's management, and reclaimable disk space from unused
+Docker images).
 
 `vitals --json` also includes a full per-container CPU/memory breakdown under
 `docker.containers` (all containers via `docker ps`/`docker stats`, not just DDEV's),
@@ -55,6 +55,7 @@ vitals --fix stop_backup                       # no target needed
 vitals --fix stop_project --target witte       # DDEV project name
 vitals --fix kill_session --target 90548       # a specific PID
 vitals --fix kill_orphaned_agents --dry-run    # preview without running it
+vitals --fix prune_docker_images               # docker image prune -f (dangling only, no -a)
 ```
 
 Every action asks for confirmation first unless `actions.require_confirmation = false`
@@ -80,8 +81,9 @@ dropdown listing metrics and findings. Actions run through the installed `vitals
 binary (`Process` + `--fix <action> --yes`, after the app's own confirmation dialog) —
 `core` never prompts or reads stdin; only the CLI does, and only without `--yes`. Only
 target-less actions (`poweroff`, `stop_backup`, `add_exclusions`,
-`kill_orphaned_agents`) get a "Run" button; `stop_project`/`kill_session` need a target
-the JSON contract doesn't carry, so they're shown as text only.
+`kill_orphaned_agents`, `prune_docker_images`) get a "Run" button; `stop_project`/
+`kill_session` need a target the JSON contract doesn't carry, so they're shown as text
+only.
 
 ## License
 

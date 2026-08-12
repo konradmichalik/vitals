@@ -47,8 +47,11 @@ pub fn collect(config: &Config) -> Result<(types::VitalsReport, Vec<ProcessEntry
     let ddev_projects = probes::ddev::list()?;
     let ddev = probes::ddev::summarize(&ddev_projects);
 
+    let dangling_images = probes::docker::dangling_images()?;
     let docker = types::DockerInfo {
         containers: probes::docker::list()?,
+        dangling_image_count: dangling_images.count,
+        reclaimable_bytes: dangling_images.reclaimable_bytes,
     };
 
     let process_entries = probes::processes::list()?;

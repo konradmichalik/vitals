@@ -24,10 +24,28 @@ pub fn evaluate(
         stale_claude_sessions(report, config),
         ddev_project_problems(report),
         unmanaged_docker_containers(report),
+        reclaimable_docker_images(report, config),
     ]
     .into_iter()
     .flatten()
     .collect()
+}
+
+fn reclaimable_docker_images(report: &VitalsReport, config: &Config) -> Option<Finding> {
+    let warn_bytes =
+        (config.thresholds.docker_reclaimable_warn_gb * 1024.0 * 1024.0 * 1024.0) as u64;
+    let reclaimable = report.docker.reclaimable_bytes;
+
+    (report.docker.dangling_image_count > 0 && reclaimable > warn_bytes).then(|| Finding {
+        rule: "reclaimable_docker_images".to_string(),
+        severity: Severity::Info,
+        message: format!(
+            "{} unused Docker image(s) — {:.1} GB reclaimable",
+            report.docker.dangling_image_count,
+            reclaimable as f64 / 1024.0 / 1024.0 / 1024.0,
+        ),
+        actions: vec!["prune_docker_images".to_string()],
+    })
 }
 
 fn unmanaged_docker_containers(report: &VitalsReport) -> Option<Finding> {
@@ -630,5 +648,40 @@ mod tests {
         let config = Config::default();
 
         assert!(!finds(&report, &[], &config, "unmanaged_docker_containers"));
+    }
+
+    #[test]
+    fn reclaimable_docker_images_fires_above_threshold() {
+        let mut report = base_report();
+        report.docker.dangling_image_count = 5;
+        report.docker.reclaimable_bytes = 6 * 1024 * 1024 * 1024;
+        let config = Config::default();
+
+        let finding = evaluate(&report, &[], &config)
+            .into_iter()
+            .find(|f| f.rule == "reclaimable_docker_images")
+            .unwrap();
+        assert_eq!(finding.severity, Severity::Info);
+        assert!(finding.message.contains('5'));
+        assert!(finding.message.contains("6.0 GB") || finding.message.contains("6 GB"));
+        assert!(finding.actions.contains(&"prune_docker_images".to_string()));
+    }
+
+    #[test]
+    fn reclaimable_docker_images_is_silent_below_threshold() {
+        let mut report = base_report();
+        report.docker.dangling_image_count = 2;
+        report.docker.reclaimable_bytes = 1024 * 1024 * 1024;
+        let config = Config::default();
+
+        assert!(!finds(&report, &[], &config, "reclaimable_docker_images"));
+    }
+
+    #[test]
+    fn reclaimable_docker_images_is_silent_with_no_dangling_images() {
+        let report = base_report();
+        let config = Config::default();
+
+        assert!(!finds(&report, &[], &config, "reclaimable_docker_images"));
     }
 }

@@ -41,6 +41,12 @@ stalled OrbStack backend. If a probe needs two commands joined by ID (`docker.rs
 `ps`+`stats`, `processes.rs`'s two `ps` calls), parse each into its own small struct and
 merge afterwards rather than combining columns in one invocation.
 
+Don't assume one Docker subcommand's size format applies to another: `docker stats`
+labels sizes with proper IEC units (`MiB`/`GiB`), but `docker images`/`docker system df`
+use go-units' decimal-looking `MB`/`GB` labels with the *same* 1024 multiplier under the
+hood — two different suffix tables (`parse_docker_size` vs `parse_image_size` in
+`docker.rs`), not one shared parser.
+
 ## JSON contract
 
 `vitals --json` output is versioned via `SCHEMA_VERSION` in `core/src/types.rs`. Bump

@@ -37,6 +37,7 @@ pub struct Thresholds {
     pub uptime_warn_days: f64,
     pub stale_session_days: f64,
     pub changed_items_warn: u64,
+    pub docker_reclaimable_warn_gb: f64,
 }
 
 impl Default for Thresholds {
@@ -48,6 +49,7 @@ impl Default for Thresholds {
             uptime_warn_days: 7.0,
             stale_session_days: 3.0,
             changed_items_warn: 20_000,
+            docker_reclaimable_warn_gb: 5.0,
         }
     }
 }
@@ -122,6 +124,7 @@ compressor_warn_gb = 8
 uptime_warn_days = 7
 stale_session_days = 3
 changed_items_warn = 20000
+docker_reclaimable_warn_gb = 10
 
 [actions]
 require_confirmation = true
@@ -136,6 +139,7 @@ require_confirmation = true
             vec!["PhpStorm2026.1".to_string()]
         );
         assert_eq!(config.thresholds.changed_items_warn, 20_000);
+        assert_eq!(config.thresholds.docker_reclaimable_warn_gb, 10.0);
         assert!(config.actions.require_confirmation);
     }
 

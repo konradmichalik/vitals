@@ -13,6 +13,12 @@ pub enum Action {
     AddExclusions(Vec<String>),
     KillOrphanedAgents(Vec<u32>),
     KillSession(u32),
+    /// Deliberately the conservative, non-`-a` prune: only removes
+    /// dangling (untagged) images no container still references, never
+    /// tagged-but-unused ones. Matches what `probes::docker::
+    /// dangling_images` actually measures, so the reclaimable figure a
+    /// finding reports and what this action frees stay honest.
+    PruneDockerImages,
 }
 
 impl Action {
@@ -26,6 +32,7 @@ impl Action {
             Action::AddExclusions(paths) => format!("tmutil addexclusion {}", paths.join(" ")),
             Action::KillOrphanedAgents(pids) => format!("kill {}", join_pids(pids)),
             Action::KillSession(pid) => format!("kill {pid}"),
+            Action::PruneDockerImages => "docker image prune -f".to_string(),
         }
     }
 
@@ -43,6 +50,7 @@ impl Action {
                 .iter()
                 .try_for_each(|&pid| terminate_with_escalation(pid)),
             Action::KillSession(pid) => terminate_with_escalation(*pid),
+            Action::PruneDockerImages => shell::run("docker", &["image", "prune", "-f"]).map(drop),
         }
     }
 }
@@ -106,5 +114,13 @@ mod tests {
     #[test]
     fn describes_kill_session_with_single_pid() {
         assert_eq!(Action::KillSession(90548).describe(), "kill 90548");
+    }
+
+    #[test]
+    fn describes_prune_docker_images() {
+        assert_eq!(
+            Action::PruneDockerImages.describe(),
+            "docker image prune -f"
+        );
     }
 }

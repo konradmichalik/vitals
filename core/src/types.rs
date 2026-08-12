@@ -89,6 +89,8 @@ pub struct DdevInfo {
 #[serde(rename_all = "camelCase")]
 pub struct DockerInfo {
     pub containers: Vec<DockerContainer>,
+    pub dangling_image_count: u32,
+    pub reclaimable_bytes: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -17,8 +17,10 @@ use crate::types::DockerContainer;
 
 const PS_TIMEOUT: Duration = Duration::from_secs(15);
 const STATS_TIMEOUT: Duration = Duration::from_secs(15);
+const IMAGES_TIMEOUT: Duration = Duration::from_secs(15);
 const PS_COMMAND: &str = "docker ps --format '{{json .}}'";
 const STATS_COMMAND: &str = "docker stats --no-stream --format '{{json .}}'";
+const IMAGES_COMMAND: &str = "docker images --filter dangling=true --format '{{json .}}'";
 
 #[derive(Debug)]
 struct PsEntry {
@@ -149,6 +151,105 @@ fn parse_docker_size(value: &str) -> Option<u64> {
     })
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub struct DanglingImages {
+    pub count: u32,
+    pub reclaimable_bytes: u64,
+}
+
+#[derive(Debug)]
+struct DanglingImageEntry {
+    /// Kept as the raw string, not parsed to a number — we only ever
+    /// compare it to `"0"`.
+    containers: String,
+    size_bytes: u64,
+}
+
+/// `docker image prune` (without `-a`) only removes dangling (untagged)
+/// images that no container — running or stopped — still references.
+/// Only entries with zero referencing containers are counted here, so
+/// the reported reclaimable total actually matches what that specific,
+/// conservative command would free — not the larger number `-a` would
+/// reclaim by also removing tagged-but-unused images.
+pub fn dangling_images() -> Result<DanglingImages, VitalsError> {
+    match super::shell::run_with_timeout(
+        "docker",
+        &[
+            "images",
+            "--filter",
+            "dangling=true",
+            "--format",
+            "{{json .}}",
+        ],
+        IMAGES_TIMEOUT,
+    ) {
+        Ok(raw) => parse_dangling_images(&raw),
+        Err(VitalsError::CommandFailed { source, .. })
+            if source.kind() == std::io::ErrorKind::NotFound =>
+        {
+            Ok(DanglingImages::default())
+        }
+        Err(err) => Err(err),
+    }
+}
+
+fn parse_dangling_images(raw: &str) -> Result<DanglingImages, VitalsError> {
+    let entries: Vec<DanglingImageEntry> = raw
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(parse_dangling_image_line)
+        .collect::<Result<_, _>>()?;
+
+    let unreferenced: Vec<&DanglingImageEntry> = entries
+        .iter()
+        .filter(|entry| entry.containers == "0")
+        .collect();
+    let count = unreferenced.len() as u32;
+    let reclaimable_bytes = unreferenced.iter().map(|entry| entry.size_bytes).sum();
+
+    Ok(DanglingImages {
+        count,
+        reclaimable_bytes,
+    })
+}
+
+fn parse_dangling_image_line(line: &str) -> Result<DanglingImageEntry, VitalsError> {
+    let value: serde_json::Value = serde_json::from_str(line)
+        .map_err(|source| VitalsError::parse(IMAGES_COMMAND, source.to_string()))?;
+
+    let containers = super::json_field(&value, "Containers", IMAGES_COMMAND)?;
+    let size_str = super::json_field(&value, "Size", IMAGES_COMMAND)?;
+    let size_bytes = parse_image_size(&size_str).ok_or_else(|| {
+        VitalsError::parse(IMAGES_COMMAND, format!("`{size_str}` is not a valid size"))
+    })?;
+
+    Ok(DanglingImageEntry {
+        containers,
+        size_bytes,
+    })
+}
+
+/// `docker images`' `Size` column uses go-units' `HumanSize` labels
+/// (`B`/`kB`/`MB`/`GB`) — decimal-looking suffixes but an actual 1024
+/// multiplier under the hood, unlike `docker stats`' proper IEC
+/// `KiB`/`MiB`/`GiB` labels that `parse_docker_size` above handles. The
+/// two commands format sizes differently, so this needs its own table.
+fn parse_image_size(value: &str) -> Option<u64> {
+    const UNITS: &[(&str, f64)] = &[
+        ("GB", 1024.0 * 1024.0 * 1024.0),
+        ("MB", 1024.0 * 1024.0),
+        ("kB", 1024.0),
+        ("B", 1.0),
+    ];
+
+    UNITS.iter().find_map(|(suffix, multiplier)| {
+        value
+            .strip_suffix(suffix)
+            .and_then(|number| number.parse::<f64>().ok())
+            .map(|number| (number * multiplier).round() as u64)
+    })
+}
+
 fn merge(ps_entries: Vec<PsEntry>, stats_entries: &[StatsEntry]) -> Vec<DockerContainer> {
     let stats_by_id: HashMap<&str, &StatsEntry> =
         stats_entries.iter().map(|s| (s.id.as_str(), s)).collect();
@@ -186,6 +287,17 @@ mod tests {
     const DDEV_WEB_STATS_LINE: &str = r#"{"BlockIO":"3.34GB / 3.18GB","CPUPerc":"0.02%","Container":"95b1ce6cdd20045b6d64d47f0c6d7052a2900a58bfb39b8a007ae07a36040cf1","ID":"95b1ce6cdd20","MemPerc":"1.74%","MemUsage":"139.6MiB / 7.816GiB","Name":"ddev-pagetree-facets-web","NetIO":"1.05GB / 49.4MB","PIDs":"111"}"#;
 
     const PLAIN_COMPOSE_STATS_LINE: &str = r#"{"BlockIO":"6.2GB / 51.5MB","CPUPerc":"0.00%","Container":"a3735ec9b44529225a9be3bb8665891b03cbc9f3606e64fd5d5d5a54be5ce56e","ID":"a3735ec9b445","MemPerc":"0.05%","MemUsage":"3.824MiB / 7.816GiB","Name":"verdi-middleware-postgres-1","NetIO":"94.6kB / 60.1kB","PIDs":"6"}"#;
+
+    // Real `docker images --filter dangling=true --format '{{json .}}'`
+    // lines captured on a live machine. Note some dangling (untagged)
+    // images still have a nonzero Containers count — a stopped or
+    // running container still references them, so `docker image prune`
+    // would skip them even though they're untagged.
+    const DANGLING_UNUSED_LINE: &str = r#"{"Containers":"0","CreatedAt":"2026-08-10 17:03:13 +0200 CEST","CreatedSince":"46 hours ago","Digest":"<none>","ID":"babccc01d2f7","Repository":"<none>","SharedSize":"N/A","Size":"1.76GB","Tag":"<none>","UniqueSize":"N/A"}"#;
+
+    const DANGLING_STILL_REFERENCED_LINE: &str = r#"{"Containers":"1","CreatedAt":"2026-08-05 02:38:39 +0200 CEST","CreatedSince":"7 days ago","Digest":"","ID":"b9982e1879d4","Repository":"postgres","SharedSize":"N/A","Size":"476MB","Tag":"<none>","UniqueSize":"N/A"}"#;
+
+    const DANGLING_UNUSED_LINE_2: &str = r#"{"Containers":"0","CreatedAt":"2026-07-27 13:57:14 +0200 CEST","CreatedSince":"2 weeks ago","Digest":"<none>","ID":"e85909867eea","Repository":"<none>","SharedSize":"N/A","Size":"576MB","Tag":"<none>","UniqueSize":"N/A"}"#;
 
     #[test]
     fn label_value_extracts_a_present_label() {
@@ -306,5 +418,54 @@ mod tests {
             unmanaged.compose_project,
             Some("verdi-middleware".to_string())
         );
+    }
+
+    #[test]
+    fn parses_image_size_units() {
+        assert_eq!(parse_image_size("1.76GB"), Some(gb(1.76)));
+        assert_eq!(parse_image_size("476MB"), Some(mb(476.0)));
+        assert_eq!(parse_image_size("512B"), Some(512));
+        assert_eq!(parse_image_size("not-a-size"), None);
+    }
+
+    fn mb(n: f64) -> u64 {
+        (n * 1024.0 * 1024.0).round() as u64
+    }
+
+    fn gb(n: f64) -> u64 {
+        (n * 1024.0 * 1024.0 * 1024.0).round() as u64
+    }
+
+    #[test]
+    fn parse_dangling_image_line_extracts_containers_and_size() {
+        let entry = parse_dangling_image_line(DANGLING_UNUSED_LINE).unwrap();
+        assert_eq!(entry.containers, "0");
+        assert_eq!(entry.size_bytes, gb(1.76));
+    }
+
+    #[test]
+    fn parse_dangling_image_line_rejects_invalid_json() {
+        let err = parse_dangling_image_line("not json").unwrap_err();
+        assert!(matches!(err, VitalsError::ParseError { .. }));
+    }
+
+    #[test]
+    fn parse_dangling_images_only_counts_unreferenced_images() {
+        let raw = format!(
+            "{DANGLING_UNUSED_LINE}\n{DANGLING_STILL_REFERENCED_LINE}\n{DANGLING_UNUSED_LINE_2}\n"
+        );
+        let result = parse_dangling_images(&raw).unwrap();
+
+        // The 476MB entry has Containers: "1" — still referenced, so
+        // `docker image prune` would skip it. Only the two 0-container
+        // entries should count toward the reclaimable total.
+        assert_eq!(result.count, 2);
+        assert_eq!(result.reclaimable_bytes, gb(1.76) + mb(576.0));
+    }
+
+    #[test]
+    fn parse_dangling_images_of_empty_output_is_zero() {
+        let result = parse_dangling_images("").unwrap();
+        assert_eq!(result, DanglingImages::default());
     }
 }

@@ -19,7 +19,8 @@ struct Cli {
     no_color: bool,
 
     /// Apply a remediation action: poweroff, stop_project, stop_backup,
-    /// add_exclusions, kill_orphaned_agents, kill_session
+    /// add_exclusions, kill_orphaned_agents, kill_session,
+    /// prune_docker_images
     #[arg(long, value_name = "ACTION")]
     fix: Option<String>,
 
@@ -194,9 +195,10 @@ fn build_action(
                 .map_err(|_| format!("`{pid}` is not a valid PID"))?;
             Ok(Action::KillSession(pid))
         }
+        "prune_docker_images" => Ok(Action::PruneDockerImages),
         other => Err(format!(
             "unknown action `{other}` (expected one of: poweroff, stop_project, stop_backup, \
-             add_exclusions, kill_orphaned_agents, kill_session)"
+             add_exclusions, kill_orphaned_agents, kill_session, prune_docker_images)"
         )),
     }
 }
@@ -569,5 +571,14 @@ mod tests {
     fn build_action_rejects_unknown_action() {
         let config = Config::default();
         assert!(build_action("launch_the_missiles", None, None, &config).is_err());
+    }
+
+    #[test]
+    fn build_action_prune_docker_images_needs_no_target_or_report() {
+        let config = Config::default();
+        assert_eq!(
+            build_action("prune_docker_images", None, None, &config).unwrap(),
+            Action::PruneDockerImages
+        );
     }
 }
