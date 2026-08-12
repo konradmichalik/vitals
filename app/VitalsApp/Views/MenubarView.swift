@@ -100,13 +100,24 @@ struct MenubarView: View {
     }
 
     private func metricsSummary(_ report: VitalsReport) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(String(
-                format: "load %.2f %.2f %.2f",
-                report.system.load.m1,
-                report.system.load.m5,
-                report.system.load.m15
-            ))
+        let load = report.system.load
+        let cores = report.system.cores
+        let status = LoadStatus.evaluate(load1: load.m1, performanceCores: cores.performance)
+
+        return VStack(alignment: .leading, spacing: 2) {
+            // htop-style single "Load average:" label rather than
+            // per-number labels — the 1/5/15m order is well-established
+            // and per-number labels just add noise. Color mirrors the
+            // rule engine's own load thresholds (§5); weight changes too
+            // so severity isn't conveyed by color alone.
+            HStack(spacing: 4) {
+                Text("Load average:")
+                Text(String(format: "%.2f · %.2f · %.2f", load.m1, load.m5, load.m15))
+                    .fontWeight(status == .normal ? .regular : .semibold)
+                    .foregroundStyle(status.color)
+                Text("(\(cores.performance)P/\(cores.efficiency)E)")
+                    .foregroundStyle(.tertiary)
+            }
             Text("\(report.docker.containers.count) container(s), \(report.ddev.running.count) DDEV project(s) running")
         }
         .font(.caption)
