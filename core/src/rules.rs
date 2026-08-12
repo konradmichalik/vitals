@@ -25,6 +25,7 @@ pub fn evaluate(
         ddev_project_problems(report),
         unmanaged_docker_containers(report),
         reclaimable_docker_images(report, config),
+        load_status(report, config),
     ]
     .into_iter()
     .flatten()
@@ -83,6 +84,38 @@ fn unmanaged_docker_containers(report: &VitalsReport) -> Option<Finding> {
 fn load_exceeds_critical(report: &VitalsReport, config: &Config) -> bool {
     let p_cores = f64::from(report.system.cores.performance);
     report.system.load.m1 > p_cores * config.thresholds.load_critical_factor
+}
+
+/// Unlike `container_load`/`backup_scanning_container_data`, which only
+/// fire once high load is correlated with a specific root cause, this is
+/// a plain echo of raw load vs. core count — added because the menubar
+/// app's own quick-glance load indicator (same thresholds) had no
+/// corresponding finding, so it could show "Critical" with no finding,
+/// no menubar badge, and nothing a CLI user would ever see either.
+fn load_status(report: &VitalsReport, config: &Config) -> Option<Finding> {
+    let p_cores = f64::from(report.system.cores.performance);
+    if p_cores <= 0.0 {
+        return None;
+    }
+    let ratio = report.system.load.m1 / p_cores;
+
+    let (severity, label) = if ratio > config.thresholds.load_critical_factor {
+        (Severity::Critical, "critical")
+    } else if ratio > config.thresholds.load_warn_factor {
+        (Severity::Warn, "elevated")
+    } else {
+        return None;
+    };
+
+    Some(Finding {
+        rule: "load_status".to_string(),
+        severity,
+        message: format!(
+            "Load average is {label} ({:.2} vs {} performance cores)",
+            report.system.load.m1, report.system.cores.performance
+        ),
+        actions: Vec::new(),
+    })
 }
 
 fn backup_scanning_container_data(report: &VitalsReport, config: &Config) -> Option<Finding> {
@@ -683,5 +716,49 @@ mod tests {
         let config = Config::default();
 
         assert!(!finds(&report, &[], &config, "reclaimable_docker_images"));
+    }
+
+    #[test]
+    fn load_status_is_silent_when_load_normal() {
+        let report = base_report();
+        let config = Config::default();
+
+        assert!(!finds(&report, &[], &config, "load_status"));
+    }
+
+    #[test]
+    fn load_status_warns_when_load_exceeds_warn_factor() {
+        let mut report = base_report();
+        report.system.load.m1 = 11.0; // 1.1x 10 performance cores
+        let config = Config::default();
+
+        let finding = evaluate(&report, &[], &config)
+            .into_iter()
+            .find(|f| f.rule == "load_status")
+            .unwrap();
+        assert_eq!(finding.severity, Severity::Warn);
+    }
+
+    #[test]
+    fn load_status_is_critical_when_load_exceeds_critical_factor() {
+        let mut report = base_report();
+        report.system.load.m1 = 19.74; // ~2x 10 performance cores
+        let config = Config::default();
+
+        let finding = evaluate(&report, &[], &config)
+            .into_iter()
+            .find(|f| f.rule == "load_status")
+            .unwrap();
+        assert_eq!(finding.severity, Severity::Critical);
+        assert!(finding.message.contains("19.74"));
+    }
+
+    #[test]
+    fn load_status_is_silent_exactly_at_warn_factor_boundary() {
+        let mut report = base_report();
+        report.system.load.m1 = 10.0; // exactly 1.0x, not > warn factor
+        let config = Config::default();
+
+        assert!(!finds(&report, &[], &config, "load_status"));
     }
 }
