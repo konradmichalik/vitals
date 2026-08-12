@@ -82,16 +82,25 @@ struct MenubarView: View {
     }
 
     private func reportView(_ report: VitalsReport) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            metricsSummary(report)
+        VStack(alignment: .leading, spacing: 10) {
+            metricsSection(report)
             if report.findings.isEmpty {
                 Text("No findings — all vital signs normal.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             } else {
-                ForEach(report.findings) { finding in
-                    FindingRow(finding: finding) { action in
-                        pendingAction = PendingAction(action: action)
+                // A Divider between rows (not around the whole group) so
+                // the list reads as one connected block instead of
+                // findings running into each other with only padding
+                // between them.
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(report.findings.enumerated()), id: \.element.id) { index, finding in
+                        if index > 0 {
+                            Divider()
+                        }
+                        FindingRow(finding: finding) { action in
+                            pendingAction = PendingAction(action: action)
+                        }
                     }
                 }
             }
@@ -99,25 +108,19 @@ struct MenubarView: View {
         .padding(12)
     }
 
-    private func metricsSummary(_ report: VitalsReport) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            loadSection(report)
-            Text("\(report.docker.containers.count) container(s), \(report.ddev.running.count) DDEV project(s) running")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-    }
-
-    /// Pulled out as its own visually distinct "card" — load average is
-    /// the one metric worth noticing at a glance, so it gets a bigger,
-    /// bolder figure and a subtle background instead of blending into
-    /// the same small caption text as everything else.
-    private func loadSection(_ report: VitalsReport) -> some View {
+    /// A single bordered "card" for the at-a-glance numbers — load
+    /// average (the one figure worth a bigger, bolder treatment) plus
+    /// the docker/DDEV counts as a second row, rather than the counts
+    /// floating unattached between the card and the findings list.
+    /// The background tint alone barely showed up against the window's
+    /// own vibrancy material, so a matching-color border makes the
+    /// boundary actually visible.
+    private func metricsSection(_ report: VitalsReport) -> some View {
         let load = report.system.load
         let cores = report.system.cores
         let status = LoadStatus.evaluate(load1: load.m1, performanceCores: cores.performance)
 
-        return VStack(alignment: .leading, spacing: 3) {
+        return VStack(alignment: .leading, spacing: 4) {
             // htop-style single "Load average" label rather than
             // per-number labels — the 1/5/15m order is well-established
             // and per-number labels just add noise. The status word
@@ -143,9 +146,20 @@ struct MenubarView: View {
             .font(.caption2)
             .foregroundStyle(.tertiary)
             .fixedSize(horizontal: false, vertical: true)
+
+            Divider()
+                .padding(.vertical, 2)
+
+            Text("\(report.docker.containers.count) container(s) · \(report.ddev.running.count) DDEV project(s) running")
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
-        .padding(8)
+        .padding(10)
         .background(status.color.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(status.color.opacity(0.25), lineWidth: 1)
+        )
     }
 
     private var footer: some View {
