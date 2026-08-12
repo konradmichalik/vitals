@@ -14,6 +14,7 @@ pub struct VitalsReport {
     pub system: SystemInfo,
     pub time_machine: TimeMachineInfo,
     pub ddev: DdevInfo,
+    pub docker: DockerInfo,
     pub processes: ProcessesInfo,
     pub findings: Vec<Finding>,
 }
@@ -82,6 +83,29 @@ pub struct DdevInfo {
     pub problems: Vec<String>,
     pub paused_count: u32,
     pub stopped_count: u32,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DockerInfo {
+    pub containers: Vec<DockerContainer>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DockerContainer {
+    pub id: String,
+    pub name: String,
+    pub image: String,
+    pub cpu_percent: f64,
+    pub mem_bytes: u64,
+    /// True for any DDEV-managed container, including its shared,
+    /// not-project-specific infrastructure (router, ssh-agent). Separate
+    /// from `ddev_project`: DDEV's own shared containers carry the
+    /// `com.ddev.platform` label but an empty `com.ddev.site-name`.
+    pub ddev_managed: bool,
+    pub ddev_project: Option<String>,
+    pub compose_project: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

@@ -246,6 +246,17 @@ fn format_tty(report: &VitalsReport, use_color: bool) -> String {
         report.ddev.paused_count,
         report.ddev.problems.len(),
     ));
+    let unmanaged_containers = report
+        .docker
+        .containers
+        .iter()
+        .filter(|c| !c.ddev_managed)
+        .count();
+    out.push_str(&format!(
+        "docker         {} container(s) ({} unmanaged)\n",
+        report.docker.containers.len(),
+        unmanaged_containers,
+    ));
     out.push_str(&format!(
         "processes      {} claude session(s), {} acp agent(s), orbstack {}\n",
         report.processes.claude_sessions.len(),
@@ -302,8 +313,8 @@ mod tests {
     use super::*;
     use vitals_core::config::Config;
     use vitals_core::types::{
-        AcpAgent, CoreCount, DdevInfo, LoadAverage, MemoryInfo, PressureLevel, ProcessesInfo,
-        SystemInfo, TimeMachineInfo,
+        AcpAgent, CoreCount, DdevInfo, DockerInfo, LoadAverage, MemoryInfo, PressureLevel,
+        ProcessesInfo, SystemInfo, TimeMachineInfo,
     };
 
     fn sample_report(findings: Vec<Finding>) -> VitalsReport {
@@ -338,6 +349,7 @@ mod tests {
                 exclusions: Vec::new(),
             },
             ddev: DdevInfo::default(),
+            docker: DockerInfo::default(),
             processes: ProcessesInfo::default(),
             findings,
         }
@@ -393,6 +405,36 @@ mod tests {
         assert!(text.contains("1204140"));
         assert!(text.contains("36"));
         assert!(text.to_lowercase().contains("no findings"));
+    }
+
+    #[test]
+    fn formats_tty_report_with_docker_containers() {
+        let mut report = sample_report(Vec::new());
+        report.docker.containers = vec![
+            vitals_core::types::DockerContainer {
+                id: "abc".to_string(),
+                name: "ddev-witte-web".to_string(),
+                image: "ddev/ddev-webserver".to_string(),
+                cpu_percent: 0.1,
+                mem_bytes: 0,
+                ddev_managed: true,
+                ddev_project: Some("witte".to_string()),
+                compose_project: Some("ddev-witte".to_string()),
+            },
+            vitals_core::types::DockerContainer {
+                id: "def".to_string(),
+                name: "verdi-middleware-postgres-1".to_string(),
+                image: "postgres:17".to_string(),
+                cpu_percent: 0.0,
+                mem_bytes: 0,
+                ddev_managed: false,
+                ddev_project: None,
+                compose_project: Some("verdi-middleware".to_string()),
+            },
+        ];
+        let text = format_tty(&report, false);
+        assert!(text.contains("2 container(s)"));
+        assert!(text.contains("1 unmanaged"));
     }
 
     #[test]

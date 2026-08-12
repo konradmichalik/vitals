@@ -1,7 +1,7 @@
 # Vitals
 
 Vital signs of your local development stack — a macOS tool that correlates system
-metrics with the state of your dev toolchain (Time Machine, DDEV, OrbStack, IDE
+metrics with the state of your dev toolchain (Time Machine, DDEV, Docker/OrbStack, IDE
 agent processes) and surfaces named diagnoses instead of another CPU graph.
 
 Existing monitors (Stats, iStat Menus, OrbStack's own UI) show *metrics*. Vitals shows
@@ -37,9 +37,15 @@ vitals --no-color
 # exit code reflects the highest-severity finding: 0 none/info, 1 warn, 2 critical
 ```
 
-Findings come from the rule engine (8 rules — Time Machine scanning container data,
+Findings come from the rule engine (9 rules — Time Machine scanning container data,
 container load, Mutagen activity, memory ballast, orphaned PhpStorm ACP agents, stale
-Claude Code sessions, DDEV projects in a problem state, and unexcluded backup paths).
+Claude Code sessions, DDEV projects in a problem state, unexcluded backup paths, and
+Docker containers running outside DDEV's management, e.g. a plain `docker compose up`
+project).
+
+`vitals --json` also includes a full per-container CPU/memory breakdown under
+`docker.containers` (all containers via `docker ps`/`docker stats`, not just DDEV's),
+each tagged with `ddevManaged`, `ddevProject`, and `composeProject` for attribution.
 
 ### Actions
 

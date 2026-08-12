@@ -8,6 +8,7 @@
 
 pub mod cores;
 pub mod ddev;
+pub mod docker;
 pub mod load;
 pub mod memory;
 pub mod orbstack;
@@ -18,3 +19,24 @@ pub mod uptime;
 pub mod vm_stat;
 
 pub(crate) mod shell;
+
+/// Shared by every probe that shells out to a `--json`/JSON-Lines command
+/// (`ddev list`, `docker ps`, `docker stats`) and needs a specific string
+/// field out of a `serde_json::Value` record, erroring with the same
+/// shape when it's missing or non-string.
+pub(crate) fn json_field(
+    value: &serde_json::Value,
+    key: &str,
+    command: &str,
+) -> Result<String, crate::error::VitalsError> {
+    value
+        .get(key)
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string)
+        .ok_or_else(|| {
+            crate::error::VitalsError::parse(
+                command,
+                format!("missing or non-string \"{key}\" field"),
+            )
+        })
+}

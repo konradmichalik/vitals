@@ -47,6 +47,10 @@ pub fn collect(config: &Config) -> Result<(types::VitalsReport, Vec<ProcessEntry
     let ddev_projects = probes::ddev::list()?;
     let ddev = probes::ddev::summarize(&ddev_projects);
 
+    let docker = types::DockerInfo {
+        containers: probes::docker::list()?,
+    };
+
     let process_entries = probes::processes::list()?;
     let processes = types::ProcessesInfo {
         claude_sessions: classify::claude_sessions(&process_entries),
@@ -60,6 +64,7 @@ pub fn collect(config: &Config) -> Result<(types::VitalsReport, Vec<ProcessEntry
         system,
         time_machine,
         ddev,
+        docker,
         processes,
         findings: Vec::new(),
     };

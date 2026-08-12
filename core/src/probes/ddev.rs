@@ -46,9 +46,9 @@ fn parse(raw: &str) -> Result<Vec<DdevProject>, VitalsError> {
     entries
         .iter()
         .map(|entry| {
-            let name = field(entry, "name")?;
-            let status = field(entry, "status")?;
-            let location = field(entry, "approot")?;
+            let name = super::json_field(entry, "name", COMMAND)?;
+            let status = super::json_field(entry, "status", COMMAND)?;
+            let location = super::json_field(entry, "approot", COMMAND)?;
 
             Ok(DdevProject {
                 name,
@@ -57,16 +57,6 @@ fn parse(raw: &str) -> Result<Vec<DdevProject>, VitalsError> {
             })
         })
         .collect()
-}
-
-fn field(entry: &serde_json::Value, key: &str) -> Result<String, VitalsError> {
-    entry
-        .get(key)
-        .and_then(serde_json::Value::as_str)
-        .map(str::to_string)
-        .ok_or_else(|| {
-            VitalsError::parse(COMMAND, format!("missing or non-string \"{key}\" field"))
-        })
 }
 
 pub fn summarize(projects: &[DdevProject]) -> crate::types::DdevInfo {

@@ -1,10 +1,13 @@
-//! The 8 rules from concept doc §5: condition over probe data → named
-//! diagnosis → suggested action. Every finding names the specific
-//! offender (which project, which PID, how many) — never just a category.
+//! The 8 rules from concept doc §5, plus `unmanaged_docker_containers`
+//! (containers running outside DDEV's management, e.g. a plain `docker
+//! compose up` project) added after live testing showed such containers
+//! were completely invisible: condition over probe data → named diagnosis
+//! → suggested action. Every finding names the specific offender (which
+//! project, which PID, how many) — never just a category.
 
 use crate::config::Config;
 use crate::probes::processes::ProcessEntry;
-use crate::types::{Finding, Severity, VitalsReport};
+use crate::types::{DockerContainer, Finding, Severity, VitalsReport};
 
 pub fn evaluate(
     report: &VitalsReport,
@@ -20,10 +23,43 @@ pub fn evaluate(
         orphaned_acp_agents(report),
         stale_claude_sessions(report, config),
         ddev_project_problems(report),
+        unmanaged_docker_containers(report),
     ]
     .into_iter()
     .flatten()
     .collect()
+}
+
+fn unmanaged_docker_containers(report: &VitalsReport) -> Option<Finding> {
+    let unmanaged: Vec<&DockerContainer> = report
+        .docker
+        .containers
+        .iter()
+        .filter(|c| !c.ddev_managed)
+        .collect();
+
+    if unmanaged.is_empty() {
+        return None;
+    }
+
+    let mut projects: Vec<&str> = unmanaged
+        .iter()
+        .map(|c| c.compose_project.as_deref().unwrap_or(c.name.as_str()))
+        .collect();
+    projects.sort_unstable();
+    projects.dedup();
+
+    Some(Finding {
+        rule: "unmanaged_docker_containers".to_string(),
+        severity: Severity::Info,
+        message: format!(
+            "{} container(s) across {} project(s) running outside DDEV: {}",
+            unmanaged.len(),
+            projects.len(),
+            projects.join(", ")
+        ),
+        actions: Vec::new(),
+    })
 }
 
 fn load_exceeds_critical(report: &VitalsReport, config: &Config) -> bool {
@@ -188,8 +224,9 @@ fn ddev_project_problems(report: &VitalsReport) -> Option<Finding> {
 mod tests {
     use super::*;
     use crate::types::{
-        AcpAgent, ClaudeSession, CoreCount, DdevInfo, LoadAverage, MemoryInfo, OrbstackProcess,
-        PressureLevel, ProcessesInfo, SystemInfo, TimeMachineInfo, TmExclusion,
+        AcpAgent, ClaudeSession, CoreCount, DdevInfo, DockerContainer, DockerInfo, LoadAverage,
+        MemoryInfo, OrbstackProcess, PressureLevel, ProcessesInfo, SystemInfo, TimeMachineInfo,
+        TmExclusion,
     };
 
     fn base_report() -> VitalsReport {
@@ -224,6 +261,7 @@ mod tests {
                 exclusions: Vec::new(),
             },
             ddev: DdevInfo::default(),
+            docker: DockerInfo::default(),
             processes: ProcessesInfo::default(),
             findings: Vec::new(),
         }
@@ -479,5 +517,118 @@ mod tests {
         let config = Config::default();
 
         assert!(evaluate(&report, &[], &config).is_empty());
+    }
+
+    fn docker_container(
+        name: &str,
+        ddev_managed: bool,
+        ddev_project: Option<&str>,
+        compose_project: Option<&str>,
+    ) -> DockerContainer {
+        DockerContainer {
+            id: "abc123".to_string(),
+            name: name.to_string(),
+            image: "postgres:17".to_string(),
+            cpu_percent: 0.0,
+            mem_bytes: 0,
+            ddev_managed,
+            ddev_project: ddev_project.map(str::to_string),
+            compose_project: compose_project.map(str::to_string),
+        }
+    }
+
+    #[test]
+    fn unmanaged_docker_containers_fires_and_names_the_compose_project() {
+        let mut report = base_report();
+        report.docker.containers = vec![
+            docker_container("ddev-witte-web", true, Some("witte"), Some("ddev-witte")),
+            docker_container(
+                "verdi-middleware-postgres-1",
+                false,
+                None,
+                Some("verdi-middleware"),
+            ),
+        ];
+        let config = Config::default();
+
+        let finding = evaluate(&report, &[], &config)
+            .into_iter()
+            .find(|f| f.rule == "unmanaged_docker_containers")
+            .unwrap();
+        assert_eq!(finding.severity, Severity::Info);
+        assert!(finding.message.contains("verdi-middleware"));
+        assert!(!finding.message.contains("witte"));
+    }
+
+    #[test]
+    fn unmanaged_docker_containers_dedupes_by_compose_project() {
+        let mut report = base_report();
+        report.docker.containers = vec![
+            docker_container(
+                "verdi-middleware-postgres-1",
+                false,
+                None,
+                Some("verdi-middleware"),
+            ),
+            docker_container(
+                "verdi-middleware-mariadb-1",
+                false,
+                None,
+                Some("verdi-middleware"),
+            ),
+        ];
+        let config = Config::default();
+
+        let finding = evaluate(&report, &[], &config)
+            .into_iter()
+            .find(|f| f.rule == "unmanaged_docker_containers")
+            .unwrap();
+        assert!(finding.message.contains('2'));
+        assert_eq!(finding.message.matches("verdi-middleware").count(), 1);
+    }
+
+    #[test]
+    fn unmanaged_docker_containers_falls_back_to_container_name_without_compose_project() {
+        let mut report = base_report();
+        report.docker.containers = vec![docker_container("standalone-redis", false, None, None)];
+        let config = Config::default();
+
+        let finding = evaluate(&report, &[], &config)
+            .into_iter()
+            .find(|f| f.rule == "unmanaged_docker_containers")
+            .unwrap();
+        assert!(finding.message.contains("standalone-redis"));
+    }
+
+    #[test]
+    fn unmanaged_docker_containers_is_silent_when_everything_is_ddev_managed() {
+        let mut report = base_report();
+        report.docker.containers = vec![docker_container(
+            "ddev-witte-web",
+            true,
+            Some("witte"),
+            Some("ddev-witte"),
+        )];
+        let config = Config::default();
+
+        assert!(!finds(&report, &[], &config, "unmanaged_docker_containers"));
+    }
+
+    /// Real live bug: DDEV's own shared router/ssh-agent containers have
+    /// no project-specific `ddev_project` (empty `com.ddev.site-name`),
+    /// but they ARE DDEV-managed (`com.ddev.platform=ddev`) — they must
+    /// not be reported as "running outside DDEV".
+    #[test]
+    fn unmanaged_docker_containers_ignores_ddev_shared_infra_with_no_project() {
+        let mut report = base_report();
+        report.docker.containers = vec![docker_container(
+            "ddev-router",
+            true,
+            None,
+            Some("ddev-router"),
+        )];
+        let config = Config::default();
+
+        assert!(!finds(&report, &[], &config, "unmanaged_docker_containers"));
     }
 }
