@@ -25,7 +25,7 @@ struct MenubarView: View {
             Divider()
             footer
         }
-        .frame(width: 360)
+        .frame(width: 380)
         .alert(item: $pendingAction) { pending in
             Alert(
                 title: Text("Run “\(pending.action)”?"),
@@ -100,23 +100,40 @@ struct MenubarView: View {
     }
 
     private func metricsSummary(_ report: VitalsReport) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            loadSection(report)
+            Text("\(report.docker.containers.count) container(s), \(report.ddev.running.count) DDEV project(s) running")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    /// Pulled out as its own visually distinct "card" — load average is
+    /// the one metric worth noticing at a glance, so it gets a bigger,
+    /// bolder figure and a subtle background instead of blending into
+    /// the same small caption text as everything else.
+    private func loadSection(_ report: VitalsReport) -> some View {
         let load = report.system.load
         let cores = report.system.cores
         let status = LoadStatus.evaluate(load1: load.m1, performanceCores: cores.performance)
 
-        return VStack(alignment: .leading, spacing: 2) {
-            // htop-style single "Load average:" label rather than
+        return VStack(alignment: .leading, spacing: 3) {
+            // htop-style single "Load average" label rather than
             // per-number labels — the 1/5/15m order is well-established
             // and per-number labels just add noise. The status word
             // (not just its color) mirrors the rule engine's own load
             // thresholds (§5), so severity is never conveyed by color
             // alone. The caption below explains what the raw Unix
             // convention actually means — the numbers alone don't.
-            HStack(spacing: 4) {
-                Text("Load average:")
+            HStack(spacing: 6) {
+                Text("Load average")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
                 Text(String(format: "%.2f · %.2f · %.2f", load.m1, load.m5, load.m15))
+                    .font(.body.weight(.bold))
+                    .foregroundStyle(status.color)
                 Text(status.label)
-                    .fontWeight(status == .normal ? .regular : .semibold)
+                    .font(.subheadline.weight(.semibold))
                     .foregroundStyle(status.color)
             }
             Text(
@@ -125,10 +142,10 @@ struct MenubarView: View {
             )
             .font(.caption2)
             .foregroundStyle(.tertiary)
-            Text("\(report.docker.containers.count) container(s), \(report.ddev.running.count) DDEV project(s) running")
+            .fixedSize(horizontal: false, vertical: true)
         }
-        .font(.caption)
-        .foregroundStyle(.secondary)
+        .padding(8)
+        .background(status.color.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
     }
 
     private var footer: some View {

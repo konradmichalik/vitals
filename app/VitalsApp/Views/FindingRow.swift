@@ -11,9 +11,14 @@ struct FindingRow: View {
                 Text(finding.rule)
                     .font(.subheadline.weight(.medium))
             }
+            // Without fixedSize, Text inside this MenuBarExtra .window
+            // panel truncates to one line instead of wrapping — cutting
+            // off exactly the detail (project names, GB figures) that
+            // made the message worth reading in the first place.
             Text(finding.message)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
             if !finding.actions.isEmpty {
                 actionRow
             }

@@ -24,4 +24,23 @@ final class TrafficLightTests: XCTestCase {
         let findings = [finding(.info), finding(.info)]
         XCTAssertEqual(TrafficLight.from(findings: findings), .green)
     }
+
+    func testTooltipForNoFindings() {
+        XCTAssertEqual(TrafficLight.tooltip(for: []), "Vitals — all clear")
+    }
+
+    func testTooltipCountsFindingsAndNamesHighestSeverity() {
+        let findings = [finding(.info), finding(.warn)]
+        XCTAssertEqual(TrafficLight.tooltip(for: findings), "Vitals — 2 finding(s), highest: warning")
+    }
+
+    func testTooltipNamesCriticalAsHighest() {
+        let findings = [finding(.info), finding(.critical)]
+        XCTAssertEqual(TrafficLight.tooltip(for: findings), "Vitals — 2 finding(s), highest: critical")
+    }
+
+    func testTooltipNamesInfoAsHighestWhenOnlyInfoFindings() {
+        let findings = [finding(.info)]
+        XCTAssertEqual(TrafficLight.tooltip(for: findings), "Vitals — 1 finding(s), highest: info")
+    }
 }

@@ -26,6 +26,9 @@ struct VitalsApp: App {
                     .offset(x: 4, y: -4)
             }
             .frame(width: 22, height: 18)
+            // The badge's meaning wasn't explained anywhere — hovering
+            // now answers "what does this indicate?" directly.
+            .help(TrafficLight.tooltip(for: appState.report?.findings ?? []))
         }
         .menuBarExtraStyle(.window)
     }
