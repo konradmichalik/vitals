@@ -107,17 +107,24 @@ struct MenubarView: View {
         return VStack(alignment: .leading, spacing: 2) {
             // htop-style single "Load average:" label rather than
             // per-number labels — the 1/5/15m order is well-established
-            // and per-number labels just add noise. Color mirrors the
-            // rule engine's own load thresholds (§5); weight changes too
-            // so severity isn't conveyed by color alone.
+            // and per-number labels just add noise. The status word
+            // (not just its color) mirrors the rule engine's own load
+            // thresholds (§5), so severity is never conveyed by color
+            // alone. The caption below explains what the raw Unix
+            // convention actually means — the numbers alone don't.
             HStack(spacing: 4) {
                 Text("Load average:")
                 Text(String(format: "%.2f · %.2f · %.2f", load.m1, load.m5, load.m15))
+                Text(status.label)
                     .fontWeight(status == .normal ? .regular : .semibold)
                     .foregroundStyle(status.color)
-                Text("(\(cores.performance)P/\(cores.efficiency)E)")
-                    .foregroundStyle(.tertiary)
             }
+            Text(
+                "1/5/15 min avg — processes waiting for a CPU core, " +
+                "relative to \(cores.performance) performance cores"
+            )
+            .font(.caption2)
+            .foregroundStyle(.tertiary)
             Text("\(report.docker.containers.count) container(s), \(report.ddev.running.count) DDEV project(s) running")
         }
         .font(.caption)

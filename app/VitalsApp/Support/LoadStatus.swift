@@ -28,4 +28,14 @@ enum LoadStatus: Equatable {
         case .critical: return .red
         }
     }
+
+    /// A plain-language word alongside the color, so severity isn't
+    /// conveyed by color alone.
+    var label: String {
+        switch self {
+        case .normal: return "Normal"
+        case .warn: return "Elevated"
+        case .critical: return "Critical"
+        }
+    }
 }

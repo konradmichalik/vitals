@@ -7,6 +7,36 @@ use crate::error::VitalsError;
 const DEFAULT_TIMEOUT: Duration = Duration::from_secs(10);
 const POLL_INTERVAL: Duration = Duration::from_millis(20);
 
+/// Apps launched from Finder/Xcode (as the menubar app is) don't source
+/// the user's shell profile, so their inherited `PATH` is just the bare
+/// system default — Homebrew's install dirs, where `docker`/`ddev` live,
+/// are missing. Without this, those probes silently "degrade gracefully"
+/// to *reporting nothing installed* rather than actually finding them —
+/// discovered when the app showed 0 containers/0 DDEV projects that the
+/// same CLI, run from a real Terminal, saw correctly.
+const HOMEBREW_PATHS: &[&str] = &[
+    "/opt/homebrew/bin",
+    "/opt/homebrew/sbin",
+    "/usr/local/bin",
+    "/usr/local/sbin",
+];
+
+fn augmented_path(current: Option<&str>) -> String {
+    let mut parts: Vec<&str> = current
+        .unwrap_or("")
+        .split(':')
+        .filter(|s| !s.is_empty())
+        .collect();
+
+    for candidate in HOMEBREW_PATHS {
+        if !parts.contains(candidate) {
+            parts.push(candidate);
+        }
+    }
+
+    parts.join(":")
+}
+
 /// Runs `command arg0 arg1 ...` with [`DEFAULT_TIMEOUT`] and returns its
 /// captured stdout.
 pub(crate) fn run(command: &str, args: &[&str]) -> Result<String, VitalsError> {
@@ -33,6 +63,10 @@ pub(crate) fn run_with_timeout(
 
     let mut child = Command::new(command)
         .args(args)
+        .env(
+            "PATH",
+            augmented_path(std::env::var("PATH").ok().as_deref()),
+        )
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
@@ -111,6 +145,27 @@ mod tests {
         let err = run_with_timeout("sleep", &["5"], Duration::from_millis(100)).unwrap_err();
         assert!(matches!(err, VitalsError::Timeout { .. }));
         assert!(start.elapsed() < Duration::from_secs(2));
+    }
+
+    #[test]
+    fn augmented_path_adds_homebrew_dirs_when_missing() {
+        let result = augmented_path(Some("/usr/bin:/bin"));
+        assert!(result.starts_with("/usr/bin:/bin:"));
+        assert!(result.contains("/opt/homebrew/bin"));
+        assert!(result.contains("/usr/local/bin"));
+    }
+
+    #[test]
+    fn augmented_path_does_not_duplicate_an_already_present_homebrew_dir() {
+        let result = augmented_path(Some("/opt/homebrew/bin:/usr/bin"));
+        assert_eq!(result.matches("/opt/homebrew/bin").count(), 1);
+    }
+
+    #[test]
+    fn augmented_path_adds_homebrew_dirs_even_with_no_path_set() {
+        let result = augmented_path(None);
+        assert!(result.contains("/opt/homebrew/bin"));
+        assert!(result.contains("/usr/local/bin"));
     }
 
     #[test]

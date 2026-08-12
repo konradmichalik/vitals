@@ -25,4 +25,16 @@ final class LoadStatusTests: XCTestCase {
     func testBoundaryAtExactlyCriticalFactorIsStillWarn() {
         XCTAssertEqual(LoadStatus.evaluate(load1: 15.0, performanceCores: 10), .warn)
     }
+
+    func testNormalLabelIsHumanReadable() {
+        XCTAssertEqual(LoadStatus.normal.label, "Normal")
+    }
+
+    func testWarnLabelIsHumanReadable() {
+        XCTAssertEqual(LoadStatus.warn.label, "Elevated")
+    }
+
+    func testCriticalLabelIsHumanReadable() {
+        XCTAssertEqual(LoadStatus.critical.label, "Critical")
+    }
 }
