@@ -37,5 +37,9 @@ struct VitalsApp: App {
             .help(TrafficLight.tooltip(for: appState.report?.findings ?? []))
         }
         .menuBarExtraStyle(.window)
+
+        Settings {
+            SettingsView()
+        }
     }
 }

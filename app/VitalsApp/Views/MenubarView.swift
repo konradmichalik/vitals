@@ -44,6 +44,14 @@ struct MenubarView: View {
                 statusPill(report.findings)
             }
             Spacer()
+            // MenuBarExtra apps have no app menu of their own, so there's
+            // no automatic Cmd+, path to Settings the way a normal app
+            // gets one for free — SettingsLink is the explicit opener.
+            SettingsLink {
+                Image(systemName: "gearshape")
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
         }
         .padding(12)
     }
