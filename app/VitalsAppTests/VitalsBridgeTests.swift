@@ -15,11 +15,13 @@ final class VitalsBridgeTests: XCTestCase {
             "memory": {
                 "pressureLevel": "normal",
                 "freePercent": 36,
+                "usedPercent": 64,
                 "pageSizeBytes": 16384,
                 "compressorBytes": 10905550848,
                 "swapUsedBytes": 21690548224,
                 "pageouts": 7301205
-            }
+            },
+            "cpu": { "userPercent": 22.82, "systemPercent": 22.93, "idlePercent": 54.23 }
         },
         "timeMachine": { "running": false, "phase": null, "changedItemCount": null, "exclusions": [] },
         "ddev": { "running": [], "problems": [], "pausedCount": 0, "stoppedCount": 0 },

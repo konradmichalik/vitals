@@ -19,6 +19,13 @@ struct SystemInfo: Codable {
     let load: LoadAverage
     let cores: CoreCount
     let memory: MemoryInfo
+    let cpu: CpuUsage
+}
+
+struct CpuUsage: Codable {
+    let userPercent: Double
+    let systemPercent: Double
+    let idlePercent: Double
 }
 
 struct LoadAverage: Codable {
@@ -33,7 +40,7 @@ struct CoreCount: Codable {
     let total: UInt32
 }
 
-enum PressureLevel: String, Codable {
+enum PressureLevel: String, Codable, Equatable {
     case normal
     case warn
     case critical
@@ -42,6 +49,7 @@ enum PressureLevel: String, Codable {
 struct MemoryInfo: Codable {
     let pressureLevel: PressureLevel
     let freePercent: UInt8
+    let usedPercent: UInt8
     let pageSizeBytes: UInt64
     let compressorBytes: UInt64
     let swapUsedBytes: UInt64

@@ -13,11 +13,13 @@ final class AppStateTests: XCTestCase {
                 memory: MemoryInfo(
                     pressureLevel: .normal,
                     freePercent: 50,
+                    usedPercent: 50,
                     pageSizeBytes: 16384,
                     compressorBytes: 0,
                     swapUsedBytes: 0,
                     pageouts: 0
-                )
+                ),
+                cpu: CpuUsage(userPercent: 10, systemPercent: 5, idlePercent: 85)
             ),
             timeMachine: TimeMachineInfo(running: false, phase: nil, changedItemCount: nil, exclusions: []),
             ddev: DdevInfo(running: [], problems: [], pausedCount: 0, stoppedCount: 0),
