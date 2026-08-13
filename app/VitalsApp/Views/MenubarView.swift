@@ -3,11 +3,11 @@ import SwiftUI
 struct MenubarView: View {
     @EnvironmentObject private var appState: AppState
     @State private var pendingAction: PendingAction?
-    @State private var lastActionMessage: String?
 
     private struct PendingAction: Identifiable {
         let action: String
-        var id: String { action }
+        var target: String?
+        var id: String { target.map { "\(action)-\($0)" } ?? action }
     }
 
     var body: some View {
@@ -15,22 +15,16 @@ struct MenubarView: View {
             header
             Divider()
             content
-            if let lastActionMessage {
-                Divider()
-                Text(lastActionMessage)
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .padding(12)
-            }
             Divider()
             footer
         }
         .frame(width: 380)
         .alert(item: $pendingAction) { pending in
-            Alert(
+            let command = pending.target.map { "\(pending.action) --target \($0)" } ?? pending.action
+            return Alert(
                 title: Text("Run “\(pending.action)”?"),
-                message: Text("This runs `vitals --fix \(pending.action)`."),
-                primaryButton: .destructive(Text("Run")) { runAction(pending.action) },
+                message: Text("This runs `vitals --fix \(command)`."),
+                primaryButton: .destructive(Text("Run")) { runAction(pending.action, target: pending.target) },
                 secondaryButton: .cancel()
             )
         }
@@ -112,38 +106,49 @@ struct MenubarView: View {
         }
     }
 
-    /// A single bordered "card" for the at-a-glance numbers — load
-    /// average (the one figure worth a bigger, bolder treatment, plus a
-    /// progress bar against the same critical threshold the rule engine
-    /// uses) and the docker/DDEV counts as a second row, rather than the
-    /// counts floating unattached between the card and the findings list.
-    /// The background tint alone barely showed up against the window's
-    /// own vibrancy material, so a matching-color border makes the
-    /// boundary actually visible.
+    /// Two bordered "cards" rather than one: the load card's tint reflects
+    /// `LoadStatus`, which only ever evaluates load average — wrapping
+    /// CPU/RAM and the DDEV list in that same colored border implied they
+    /// shared that severity too, when they've got no relation to it at
+    /// all. The second card groups them under a neutral, severity-free
+    /// border instead.
     private func metricsSection(_ report: VitalsReport) -> some View {
         let status = LoadStatus.evaluate(load1: report.system.load.m1, performanceCores: report.system.cores.performance)
 
         return VStack(alignment: .leading, spacing: 10) {
-            loadSection(report, status: status)
+            card(color: status.color) {
+                loadSection(report, status: status)
+            }
 
-            Divider()
+            card(color: .secondary) {
+                cpuMemorySection(report)
 
-            cpuMemorySection(report)
+                Divider()
 
-            Divider()
+                DdevProjectsSection(report: report) { project in
+                    pendingAction = PendingAction(action: "stop_project", target: project)
+                }
 
-            VStack(alignment: .leading, spacing: 4) {
-                sectionHeader("shippingbox", "Docker & DDEV")
-                Text("\(report.docker.containers.count) container(s) · \(report.ddev.running.count) DDEV project(s) running")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                if !report.processes.claudeSessions.isEmpty {
+                    Divider()
+                    ClaudeSessionsSection(sessions: report.processes.claudeSessions)
+                }
             }
         }
+    }
+
+    /// The background tint alone barely showed up against the window's
+    /// own vibrancy material, so a matching-color border makes the
+    /// boundary actually visible.
+    private func card(color: Color, @ViewBuilder content: () -> some View) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            content()
+        }
         .padding(10)
-        .background(status.color.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
+        .background(color.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
         .overlay(
             RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(status.color.opacity(0.25), lineWidth: 1)
+                .strokeBorder(color.opacity(0.25), lineWidth: 1)
         )
     }
 
@@ -180,6 +185,9 @@ struct MenubarView: View {
             .font(.caption2)
             .foregroundStyle(.tertiary)
             .fixedSize(horizontal: false, vertical: true)
+            TopProcessesSection(processes: report.processes.topByCpu) { pid in
+                pendingAction = PendingAction(action: "kill_session", target: String(pid))
+            }
         }
     }
 
@@ -273,7 +281,7 @@ struct MenubarView: View {
                 // findings running into each other with only padding
                 // between them.
                 VStack(alignment: .leading, spacing: 0) {
-                    ForEach(Array(report.findings.enumerated()), id: \.element.id) { index, finding in
+                    ForEach(Array(report.findings.sortedBySeverity().enumerated()), id: \.element.id) { index, finding in
                         if index > 0 {
                             Divider()
                         }
@@ -319,17 +327,22 @@ struct MenubarView: View {
         .padding(12)
     }
 
-    private func runAction(_ action: String) {
+    private func runAction(_ action: String, target: String? = nil) {
         Task.detached(priority: .userInitiated) {
-            let result = ActionRunner.run(action: action, target: nil)
-            await MainActor.run {
-                switch result {
-                case .success(let output):
-                    lastActionMessage = output.isEmpty ? "Done: \(action)" : output
-                case .failure(let error):
-                    lastActionMessage = "Failed: \(error)"
-                }
+            let result = ActionRunner.run(action: action, target: target)
+            let message: String
+            switch result {
+            case .success(let output):
+                message = output.isEmpty ? "Done: \(action)" : output
+            case .failure(let error):
+                message = "Failed: \(error)"
             }
+            // A system notification rather than inline text in the
+            // dropdown — actions run detached and the dropdown is very
+            // likely closed by the time a `stop_project`/similar action
+            // actually finishes, so an inline result alone would go
+            // unseen.
+            AppNotifier.notify(id: "action-\(action)", title: "Vitals", body: message)
             await appState.refresh()
         }
     }

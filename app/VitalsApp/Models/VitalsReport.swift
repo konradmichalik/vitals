@@ -94,15 +94,65 @@ struct ProcessesInfo: Codable {
     let claudeSessions: [ClaudeSession]
     let acpAgents: [AcpAgent]
     let orbstack: OrbstackProcess?
+    let topByCpu: [TopProcess]
 }
 
-struct ClaudeSession: Codable {
+struct TopProcess: Codable, Identifiable {
+    let pid: UInt32
+    let name: String
+    let cpuPercent: Double
+
+    var id: UInt32 { pid }
+}
+
+struct ClaudeSession: Codable, Identifiable {
     let pid: UInt32
     let etimeSeconds: UInt64
     let cpuPercent: Double
     let rssBytes: UInt64
     let kind: String
     let version: String
+    let workingDirectory: String?
+
+    var id: UInt32 { pid }
+
+    /// Every session on a machine typically shares the same `version`,
+    /// so it doesn't tell parallel sessions apart the way their project
+    /// does — this falls back to the version only when no working
+    /// directory could be resolved at all.
+    var projectLabel: String {
+        guard let workingDirectory, let name = workingDirectory.split(separator: "/").last else {
+            return "v\(version)"
+        }
+        return String(name)
+    }
+}
+
+struct ClaudeSessionGroup: Identifiable {
+    let label: String
+    let count: Int
+    let longestEtimeSeconds: UInt64
+    let cpuPercent: Double
+
+    var id: String { label }
+}
+
+extension [ClaudeSession] {
+    /// Parallel sessions in the same project are common (multiple
+    /// terminal tabs on the same repo) and would otherwise repeat the
+    /// same project label as several indistinguishable rows.
+    func groupedByProject() -> [ClaudeSessionGroup] {
+        Dictionary(grouping: self, by: \.projectLabel)
+            .map { label, sessions in
+                ClaudeSessionGroup(
+                    label: label,
+                    count: sessions.count,
+                    longestEtimeSeconds: sessions.map(\.etimeSeconds).max() ?? 0,
+                    cpuPercent: sessions.reduce(0) { $0 + $1.cpuPercent }
+                )
+            }
+            .sorted { $0.cpuPercent != $1.cpuPercent ? $0.cpuPercent > $1.cpuPercent : $0.label < $1.label }
+    }
 }
 
 struct AcpAgent: Codable {
@@ -145,6 +195,24 @@ struct Finding: Codable, Identifiable {
     let actions: [String]
 
     var id: String { rule }
+}
+
+extension [Finding] {
+    /// `rules::evaluate` (core/src/rules.rs) emits findings in a fixed
+    /// rule order, not by severity — without this, a critical finding can
+    /// end up listed below several infos. `enumerated()` breaks ties by
+    /// original position so same-severity findings don't reshuffle
+    /// between refreshes. `Array.sorted` isn't guaranteed stable on its
+    /// own.
+    func sortedBySeverity() -> [Finding] {
+        enumerated()
+            .sorted { lhs, rhs in
+                lhs.element.severity != rhs.element.severity
+                    ? lhs.element.severity > rhs.element.severity
+                    : lhs.offset < rhs.offset
+            }
+            .map(\.element)
+    }
 }
 
 /// The `{"schemaVersion":...,"error":...}` shape `vitals_collect` returns

@@ -26,7 +26,10 @@ final class VitalsBridgeTests: XCTestCase {
         "timeMachine": { "running": false, "phase": null, "changedItemCount": null, "exclusions": [] },
         "ddev": { "running": [], "problems": [], "pausedCount": 0, "stoppedCount": 0 },
         "docker": { "containers": [] },
-        "processes": { "claudeSessions": [], "acpAgents": [], "orbstack": null },
+        "processes": {
+            "claudeSessions": [], "acpAgents": [], "orbstack": null,
+            "topByCpu": [{ "pid": 4242, "name": "node", "cpuPercent": 91.2 }]
+        },
         "findings": [
             { "rule": "uptime_ballast", "severity": "info", "message": "ballast", "actions": [] }
         ]
@@ -45,6 +48,7 @@ final class VitalsBridgeTests: XCTestCase {
         XCTAssertEqual(report.schemaVersion, 1)
         XCTAssertEqual(report.system.load.m1, 7.40)
         XCTAssertEqual(report.findings.first?.rule, "uptime_ballast")
+        XCTAssertEqual(report.processes.topByCpu.first?.name, "node")
     }
 
     func testDecodesAReportedErrorEnvelope() {

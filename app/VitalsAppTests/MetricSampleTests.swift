@@ -29,7 +29,7 @@ final class MetricSampleTests: XCTestCase {
             timeMachine: TimeMachineInfo(running: false, phase: nil, changedItemCount: nil, exclusions: []),
             ddev: DdevInfo(running: [], problems: [], pausedCount: 0, stoppedCount: 0),
             docker: DockerInfo(containers: []),
-            processes: ProcessesInfo(claudeSessions: [], acpAgents: [], orbstack: nil),
+            processes: ProcessesInfo(claudeSessions: [], acpAgents: [], orbstack: nil, topByCpu: []),
             findings: []
         )
     }
