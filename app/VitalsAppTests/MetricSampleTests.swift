@@ -39,14 +39,16 @@ final class MetricSampleTests: XCTestCase {
         cpuUsedPercent: Double = 0,
         memoryUsedPercent: Double = 0,
         loadStatus: LoadStatus = .normal,
-        memoryPressure: PressureLevel = .normal
+        memoryPressure: PressureLevel = .normal,
+        timestamp: Date = Date(timeIntervalSince1970: 0)
     ) -> MetricSample {
         MetricSample(
             load: load,
             loadStatus: loadStatus,
             cpuUsedPercent: cpuUsedPercent,
             memoryUsedPercent: memoryUsedPercent,
-            memoryPressure: memoryPressure
+            memoryPressure: memoryPressure,
+            timestamp: timestamp
         )
     }
 
@@ -55,6 +57,15 @@ final class MetricSampleTests: XCTestCase {
         XCTAssertEqual(extracted.load, 13.5)
         XCTAssertEqual(extracted.cpuUsedPercent, 70)
         XCTAssertEqual(extracted.memoryUsedPercent, 78)
+    }
+
+    func testFromReportCarriesTheGivenTimestamp() {
+        let fixedDate = Date(timeIntervalSince1970: 1_723_000_000)
+        let extracted = MetricSample.from(
+            report: report(load1: 1, idlePercent: 90, memoryUsedPercent: 50),
+            timestamp: fixedDate
+        )
+        XCTAssertEqual(extracted.timestamp, fixedDate)
     }
 
     func testFromReportClassifiesLoadStatusAgainstPerformanceCores() {

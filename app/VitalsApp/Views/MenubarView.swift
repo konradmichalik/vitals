@@ -171,7 +171,7 @@ struct MenubarView: View {
                 .foregroundStyle(status.color)
             Sparkline(values: appState.history.map(\.load), color: status.color) { index in
                 let sample = appState.history[index]
-                return String(format: "%.2f · %@", sample.load, sample.loadStatus.label)
+                return "\(String(format: "%.2f", sample.load)) · \(sample.loadStatus.label) · \(relativeTime(sample.timestamp))"
             }
             Text(
                 "1/5/15 min avg — processes waiting for a CPU core, " +
@@ -204,9 +204,42 @@ struct MenubarView: View {
                 secondaryColor: memColor
             ) { index in
                 let sample = appState.history[index]
-                return "\(Int(sample.cpuUsedPercent))% CPU · \(Int(sample.memoryUsedPercent))% RAM (\(sample.memoryPressure.rawValue))"
+                return "\(Int(sample.cpuUsedPercent))% CPU · \(Int(sample.memoryUsedPercent))% RAM "
+                    + "(\(sample.memoryPressure.rawValue)) · \(relativeTime(sample.timestamp))"
+            }
+            if let caption = historySpanCaption(appState.history) {
+                Text(caption)
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
             }
         }
+    }
+
+    /// Sparklines hide their X axis to stay compact, so without this
+    /// there'd be no way to tell whether the trend covers the last 5
+    /// minutes or the last 15 — it varies with `AppState`'s adaptive poll
+    /// interval (§4: 30s green, 10s once something's firing).
+    private static let relativeTimeFormatter: RelativeDateTimeFormatter = {
+        let formatter = RelativeDateTimeFormatter()
+        formatter.unitsStyle = .abbreviated
+        return formatter
+    }()
+
+    private func relativeTime(_ date: Date) -> String {
+        Self.relativeTimeFormatter.localizedString(for: date, relativeTo: Date())
+    }
+
+    private func historySpanCaption(_ history: [MetricSample]) -> String? {
+        guard let oldest = history.first?.timestamp else { return nil }
+        let seconds = Date().timeIntervalSince(oldest)
+        guard seconds >= 30 else { return nil }
+
+        let formatter = DateComponentsFormatter()
+        formatter.allowedUnits = [.hour, .minute, .second]
+        formatter.unitsStyle = .abbreviated
+        formatter.maximumUnitCount = 1
+        guard let formatted = formatter.string(from: seconds) else { return nil }
+        return "Trend: last ~\(formatted)"
     }
 
     /// Mirrors `LoadStatus`/`TrafficLight`'s color language for the

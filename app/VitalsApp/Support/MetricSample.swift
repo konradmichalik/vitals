@@ -18,8 +18,13 @@ struct MetricSample: Equatable {
     /// signal (§7: the real scarcity indicator, not raw percent) rather
     /// than inventing a separate threshold for the sparkline.
     let memoryPressure: PressureLevel
+    /// When this sample was taken — the sparkline's X axis is hidden
+    /// (kept compact, no room for tick labels), so this is what lets the
+    /// hover tooltip and the history-span caption say how far back a
+    /// point actually is instead of leaving that entirely unknowable.
+    let timestamp: Date
 
-    static func from(report: VitalsReport) -> MetricSample {
+    static func from(report: VitalsReport, timestamp: Date = Date()) -> MetricSample {
         MetricSample(
             load: report.system.load.m1,
             loadStatus: LoadStatus.evaluate(
@@ -28,7 +33,8 @@ struct MetricSample: Equatable {
             ),
             cpuUsedPercent: 100 - report.system.cpu.idlePercent,
             memoryUsedPercent: Double(report.system.memory.usedPercent),
-            memoryPressure: report.system.memory.pressureLevel
+            memoryPressure: report.system.memory.pressureLevel,
+            timestamp: timestamp
         )
     }
 }
