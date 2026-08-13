@@ -60,9 +60,10 @@ pub fn collect(config: &Config) -> Result<(types::VitalsReport, Vec<ProcessEntry
 
     let process_entries = probes::processes::list()?;
     let processes = types::ProcessesInfo {
-        claude_sessions: classify::claude_sessions(&process_entries),
+        claude_sessions: claude_sessions(&process_entries),
         acp_agents: classify::acp_agents(&process_entries, &config.ide.retired_versions),
         orbstack: probes::orbstack::find()?,
+        top_by_cpu: top_processes(&process_entries, 5),
     };
 
     let report = types::VitalsReport {
@@ -77,6 +78,45 @@ pub fn collect(config: &Config) -> Result<(types::VitalsReport, Vec<ProcessEntry
     };
 
     Ok((report, process_entries))
+}
+
+/// `classify::claude_session_candidates` can only narrow by display name
+/// (real CLI sessions and PhpStorm ACP agents both show `comm ==
+/// "claude"`) — confirming each candidate and getting its version needs
+/// an actual process lookup, which belongs here alongside the other
+/// I/O-performing probe calls, not in the pure `classify` module.
+fn claude_sessions(processes: &[ProcessEntry]) -> Vec<types::ClaudeSession> {
+    classify::claude_session_candidates(processes)
+        .into_iter()
+        .filter_map(|process| {
+            let info = probes::claude_cli::resolve(process.pid)?;
+            Some(types::ClaudeSession {
+                pid: process.pid,
+                etime_seconds: process.etime_seconds,
+                cpu_percent: process.cpu_percent,
+                rss_bytes: process.rss_bytes,
+                kind: "cli".to_string(),
+                version: info.version,
+                working_directory: info.working_directory,
+            })
+        })
+        .collect()
+}
+
+/// Sorted highest-CPU-first; `comm` is stripped to its bare name to match
+/// how `rules::runaway_processes` already names offenders.
+fn top_processes(processes: &[ProcessEntry], limit: usize) -> Vec<types::TopProcess> {
+    let mut sorted: Vec<&ProcessEntry> = processes.iter().collect();
+    sorted.sort_by(|a, b| b.cpu_percent.total_cmp(&a.cpu_percent));
+    sorted
+        .into_iter()
+        .take(limit)
+        .map(|p| types::TopProcess {
+            pid: p.pid,
+            name: p.comm.rsplit('/').next().unwrap_or(&p.comm).to_string(),
+            cpu_percent: p.cpu_percent,
+        })
+        .collect()
 }
 
 fn percent_of(part_bytes: u64, total_bytes: u64) -> u8 {
@@ -114,5 +154,46 @@ mod tests {
     #[test]
     fn percent_of_rounds_to_nearest() {
         assert_eq!(percent_of(1, 3), 33);
+    }
+
+    fn process(pid: u32, comm: &str, cpu_percent: f64) -> ProcessEntry {
+        ProcessEntry {
+            pid,
+            ppid: 0,
+            etime_seconds: 30,
+            cpu_percent,
+            rss_bytes: 0,
+            comm: comm.to_string(),
+            command: comm.to_string(),
+        }
+    }
+
+    #[test]
+    fn top_processes_orders_by_cpu_percent_descending() {
+        let processes = vec![
+            process(1, "a", 10.0),
+            process(2, "b", 90.0),
+            process(3, "c", 50.0),
+        ];
+        let top = top_processes(&processes, 5);
+        assert_eq!(top.iter().map(|p| p.pid).collect::<Vec<_>>(), vec![2, 3, 1]);
+    }
+
+    #[test]
+    fn top_processes_respects_limit() {
+        let processes = vec![
+            process(1, "a", 10.0),
+            process(2, "b", 90.0),
+            process(3, "c", 50.0),
+        ];
+        let top = top_processes(&processes, 2);
+        assert_eq!(top.len(), 2);
+    }
+
+    #[test]
+    fn top_processes_strips_full_path_to_bare_name() {
+        let processes = vec![process(1, "/usr/local/bin/node", 10.0)];
+        let top = top_processes(&processes, 5);
+        assert_eq!(top[0].name, "node");
     }
 }

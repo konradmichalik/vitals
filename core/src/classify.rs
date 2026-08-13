@@ -1,29 +1,20 @@
 //! Buckets raw `probes::processes::ProcessEntry` rows into the process
-//! kinds the JSON contract cares about. Claude sessions match on `comm`
-//! (the resolved executable path) per §7 — never on argv or basename,
-//! since Claude Code sets argv to plain `claude`. ACP agents are the
-//! opposite case: see the doc comment on `acp_agents` for why `command`
-//! is the reliable field there instead.
+//! kinds the JSON contract cares about.
 
 use crate::probes::processes::ProcessEntry;
-use crate::types::{AcpAgent, ClaudeSession};
+use crate::types::AcpAgent;
 
-pub fn claude_sessions(processes: &[ProcessEntry]) -> Vec<ClaudeSession> {
+/// Candidates by display name only — real Claude CLI sessions report
+/// `comm` as the bare basename `claude` on this installation layout (a
+/// fixed `.app` bundle path, not a per-version directory the way an
+/// earlier version of this probe assumed), but so does a PhpStorm ACP
+/// agent's Node process, which sets the same display title. `comm`
+/// alone can't tell the two apart — `probes::claude_cli::resolve_version`
+/// confirms and extracts the version for each candidate this returns.
+pub fn claude_session_candidates(processes: &[ProcessEntry]) -> Vec<&ProcessEntry> {
     processes
         .iter()
-        .filter_map(|process| {
-            let (_, after) = process.comm.split_once("/.local/share/claude/versions/")?;
-            let version = after.split('/').next()?;
-
-            Some(ClaudeSession {
-                pid: process.pid,
-                etime_seconds: process.etime_seconds,
-                cpu_percent: process.cpu_percent,
-                rss_bytes: process.rss_bytes,
-                kind: "cli".to_string(),
-                version: version.to_string(),
-            })
-        })
+        .filter(|process| process.comm.rsplit('/').next() == Some("claude"))
         .collect()
 }
 
@@ -81,19 +72,20 @@ mod tests {
         }
     }
 
+    /// Real behavior verified on a live machine: a genuine terminal
+    /// session's `comm` is the bare basename `claude`, not a versioned
+    /// path — an earlier version of this probe assumed the latter and
+    /// never matched anything on this installation layout.
     #[test]
-    fn identifies_cli_session_by_versions_path() {
-        let processes = vec![process("/Users/km/.local/share/claude/versions/2.1.228")];
-        let sessions = claude_sessions(&processes);
-        assert_eq!(sessions.len(), 1);
-        assert_eq!(sessions[0].version, "2.1.228");
-        assert_eq!(sessions[0].kind, "cli");
+    fn identifies_candidate_by_bare_comm() {
+        let processes = vec![process("claude")];
+        assert_eq!(claude_session_candidates(&processes).len(), 1);
     }
 
     #[test]
-    fn ignores_daemon_process() {
+    fn identifies_candidate_by_path_ending_in_claude() {
         let processes = vec![process("/Users/km/.local/bin/claude")];
-        assert!(claude_sessions(&processes).is_empty());
+        assert_eq!(claude_session_candidates(&processes).len(), 1);
     }
 
     #[test]
@@ -101,7 +93,7 @@ mod tests {
         let processes = vec![process(
             "/Applications/Claude.app/Contents/MacOS/Claude Helper",
         )];
-        assert!(claude_sessions(&processes).is_empty());
+        assert!(claude_session_candidates(&processes).is_empty());
     }
 
     #[test]

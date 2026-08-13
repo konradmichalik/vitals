@@ -6,6 +6,7 @@
 //! (page size, `ps` comm vs command, `tmutil status -X` as plist, etc.)
 //! each implementation must guard against.
 
+pub mod claude_cli;
 pub mod cores;
 pub mod cpu;
 pub mod ddev;

@@ -4,7 +4,7 @@
 
 use serde::{Deserialize, Serialize};
 
-pub const SCHEMA_VERSION: u32 = 1;
+pub const SCHEMA_VERSION: u32 = 3;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -132,6 +132,18 @@ pub struct ProcessesInfo {
     pub claude_sessions: Vec<ClaudeSession>,
     pub acp_agents: Vec<AcpAgent>,
     pub orbstack: Option<OrbstackProcess>,
+    /// The processes actually driving current CPU usage — added so a
+    /// critical `load_status` finding isn't just a number with no way to
+    /// tell what's causing it.
+    pub top_by_cpu: Vec<TopProcess>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TopProcess {
+    pub pid: u32,
+    pub name: String,
+    pub cpu_percent: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -143,6 +155,10 @@ pub struct ClaudeSession {
     pub rss_bytes: u64,
     pub kind: String,
     pub version: String,
+    /// Distinguishes sessions from each other by project — every session
+    /// on a machine typically shares the same `version`, so that alone
+    /// doesn't tell parallel sessions apart the way this does.
+    pub working_directory: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

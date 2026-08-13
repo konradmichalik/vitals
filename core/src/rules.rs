@@ -646,6 +646,7 @@ mod tests {
             rss_bytes: 0,
             kind: "cli".to_string(),
             version: "2.1.228".to_string(),
+            working_directory: None,
         }];
         let config = Config::default();
 
