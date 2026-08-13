@@ -20,14 +20,14 @@ final class TrafficLightTests: XCTestCase {
         XCTAssertEqual(TrafficLight.from(findings: findings), .red)
     }
 
-    /// Info findings still get their own color, distinct from "nothing
-    /// firing at all" — matching SeverityBadge's blue for `.info` in the
-    /// dropdown. Collapsing them into green (as an earlier version did)
-    /// contradicted what the dropdown itself showed: real findings, but
-    /// an icon claiming "all clear".
-    func testBlueWhenOnlyInfoFindings() {
+    /// Info-only findings count as "nothing to act on" for the overall
+    /// badge — only warn/critical actually escalate it away from green.
+    /// The findings list itself still shows each one with its own blue
+    /// `info` badge (SeverityBadge), so the detail isn't lost — this is
+    /// specifically about the at-a-glance summary color.
+    func testGreenWhenOnlyInfoFindings() {
         let findings = [finding(.info), finding(.info)]
-        XCTAssertEqual(TrafficLight.from(findings: findings), .blue)
+        XCTAssertEqual(TrafficLight.from(findings: findings), .green)
     }
 
     func testTooltipForNoFindings() {

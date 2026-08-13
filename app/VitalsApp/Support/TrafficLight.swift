@@ -1,14 +1,13 @@
 import SwiftUI
 
 /// The menubar traffic light, derived from the highest-severity firing
-/// rule (§5: "not a number. If nothing fires: green"). Green is reserved
-/// for that literal case — zero findings. An info-only finding still
-/// gets its own color (blue, matching `SeverityBadge`'s `.info` color in
-/// the dropdown) rather than being folded into green, which would claim
-/// "all clear" while the dropdown shows something real underneath it.
+/// rule (§5: "not a number. If nothing fires: green"). Info-only findings
+/// count as green too — there's nothing to act on, and each one still
+/// shows its own blue `info` badge in the findings list (`SeverityBadge`),
+/// so the detail isn't lost. Only warn/critical actually escalate the
+/// overall badge away from green.
 enum TrafficLight: Equatable {
     case green
-    case blue
     case yellow
     case red
 
@@ -17,14 +16,13 @@ enum TrafficLight: Equatable {
         switch highest {
         case .critical: return .red
         case .warn: return .yellow
-        case .info: return .blue
+        case .info: return .green
         }
     }
 
     var color: Color {
         switch self {
         case .green: return .green
-        case .blue: return .blue
         // Same contrast fix as LoadStatus: plain yellow is illegible as
         // text (the status pill) and washes out as a small menu bar dot.
         case .yellow: return .orange
