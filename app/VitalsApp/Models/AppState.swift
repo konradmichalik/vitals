@@ -11,7 +11,7 @@ final class AppState: ObservableObject {
     @Published private(set) var lastUpdated: Date?
     @Published private(set) var history: [MetricSample] = []
 
-    @AppStorage(CriticalFindingNotifier.storageKey) private var notifyOnCritical = true
+    @AppStorage(AppNotifier.criticalFindingStorageKey) private var notifyOnCritical = true
     private var lastCriticalRules: Set<String> = []
     private var pollTask: Task<Void, Never>?
 
@@ -57,7 +57,7 @@ final class AppState: ObservableObject {
         guard notifyOnCritical else { return }
         for rule in newlyCritical {
             guard let finding = findings.first(where: { $0.rule == rule }) else { continue }
-            CriticalFindingNotifier.notify(rule: rule, message: finding.message)
+            AppNotifier.notify(id: rule, title: "Vitals — critical", body: finding.message)
         }
     }
 
