@@ -1,6 +1,24 @@
 import Charts
 import SwiftUI
 
+/// Shared by `Sparkline` and `DualSparkline` — every line in either
+/// chart uses the same weight/cap/join, so both charts stay visually
+/// consistent as a pair.
+private let sparklineLineStyle = StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round)
+
+private extension View {
+    /// The chart-frame chrome both `Sparkline` and `DualSparkline` share
+    /// — no axes/legend, and a domain that doesn't force 0 as the floor
+    /// so small fluctuations in a narrow band (e.g. RAM hovering around
+    /// 80%) are still visible as a real trend, not a near-flat line.
+    func sparklineChartStyle() -> some View {
+        chartXAxis(.hidden)
+            .chartYAxis(.hidden)
+            .chartYScale(domain: .automatic(includesZero: false))
+            .chartLegend(.hidden)
+    }
+}
+
 /// Compact, axis-less recent-trend line — a glance-only companion to the
 /// numeric value next to it, not a standalone chart with its own labels.
 /// Hovering reveals what a point actually means via `tooltip`, rather
@@ -27,13 +45,10 @@ struct Sparkline: View {
                 LineMark(x: .value("Sample", index), y: .value("Value", value))
                     .foregroundStyle(color)
                     .interpolationMethod(.catmullRom)
-                    .lineStyle(StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
+                    .lineStyle(sparklineLineStyle)
             }
         }
-        .chartXAxis(.hidden)
-        .chartYAxis(.hidden)
-        .chartYScale(domain: .automatic(includesZero: false))
-        .chartLegend(.hidden)
+        .sparklineChartStyle()
         .chartOverlay { proxy in
             SparklineHoverOverlay(proxy: proxy, sampleCount: values.count, hoveredIndex: $hoveredIndex) { index in
                 guard let y = proxy.position(forY: values[index]) else { return nil }
@@ -85,13 +100,10 @@ struct DualSparkline: View {
             LineMark(x: .value("Sample", point.index), y: .value("Value", point.value))
                 .foregroundStyle(by: .value("Series", point.series))
                 .interpolationMethod(.catmullRom)
-                .lineStyle(StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
+                .lineStyle(sparklineLineStyle)
         }
         .chartForegroundStyleScale([Self.primarySeries: primaryColor, Self.secondarySeries: secondaryColor])
-        .chartXAxis(.hidden)
-        .chartYAxis(.hidden)
-        .chartYScale(domain: .automatic(includesZero: false))
-        .chartLegend(.hidden)
+        .sparklineChartStyle()
         .chartOverlay { proxy in
             SparklineHoverOverlay(proxy: proxy, sampleCount: secondaryValues.count, hoveredIndex: $hoveredIndex) { index in
                 guard let secondaryY = proxy.position(forY: secondaryValues[index]) else { return nil }

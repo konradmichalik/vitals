@@ -204,7 +204,7 @@ struct MenubarView: View {
                 secondaryColor: memColor
             ) { index in
                 let sample = appState.history[index]
-                return "\(Int(sample.cpuUsedPercent))% CPU · \(Int(sample.memoryUsedPercent))% RAM (\(pressureLabel(sample.memoryPressure)))"
+                return "\(Int(sample.cpuUsedPercent))% CPU · \(Int(sample.memoryUsedPercent))% RAM (\(sample.memoryPressure.rawValue))"
             }
         }
     }
@@ -219,14 +219,6 @@ struct MenubarView: View {
         case .normal: return .blue
         case .warn: return .orange
         case .critical: return .red
-        }
-    }
-
-    private func pressureLabel(_ level: PressureLevel) -> String {
-        switch level {
-        case .normal: return "normal"
-        case .warn: return "warn"
-        case .critical: return "critical"
         }
     }
 
