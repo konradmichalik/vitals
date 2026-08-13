@@ -4,6 +4,7 @@ use std::process::ExitCode;
 use clap::Parser;
 use vitals_core::actions::Action;
 use vitals_core::config::Config;
+use vitals_core::probes::processes::ProcessEntry;
 use vitals_core::types::{Finding, Severity, VitalsReport};
 
 /// Vital signs of your local dev stack.
@@ -19,8 +20,8 @@ struct Cli {
     no_color: bool,
 
     /// Apply a remediation action: poweroff, stop_project, stop_backup,
-    /// add_exclusions, kill_orphaned_agents, kill_session,
-    /// prune_docker_images
+    /// add_exclusions, kill_orphaned_agents, kill_runaway_processes,
+    /// kill_session, prune_docker_images
     #[arg(long, value_name = "ACTION")]
     fix: Option<String>,
 
@@ -91,19 +92,27 @@ fn run_fix(
     json: bool,
     use_color: bool,
 ) -> ExitCode {
-    let report = if action_name == "kill_orphaned_agents" {
+    let needs_process_snapshot =
+        action_name == "kill_orphaned_agents" || action_name == "kill_runaway_processes";
+    let (report, processes) = if needs_process_snapshot {
         match vitals_core::report::collect(config) {
-            Ok((report, _processes)) => Some(report),
+            Ok((report, processes)) => (Some(report), Some(processes)),
             Err(err) => {
                 report_error(&err, json, use_color);
                 return ExitCode::FAILURE;
             }
         }
     } else {
-        None
+        (None, None)
     };
 
-    let action = match build_action(action_name, target, report.as_ref(), config) {
+    let action = match build_action(
+        action_name,
+        target,
+        report.as_ref(),
+        processes.as_deref(),
+        config,
+    ) {
         Ok(action) => action,
         Err(message) => {
             eprintln!("vitals: {message}");
@@ -147,13 +156,15 @@ fn confirm(action: &Action) -> bool {
     matches!(input.trim().to_lowercase().as_str(), "y" | "yes")
 }
 
-/// `report` is only needed by `kill_orphaned_agents` — callers should skip
-/// the (expensive, DDEV-touching) `collect()` call entirely for every other
-/// action rather than fetch a report that will go unused.
+/// `report`/`processes` are only needed by `kill_orphaned_agents`/
+/// `kill_runaway_processes` — callers should skip the (expensive,
+/// DDEV-touching) `collect()` call entirely for every other action rather
+/// than fetch a report that will go unused.
 fn build_action(
     name: &str,
     target: Option<&str>,
     report: Option<&VitalsReport>,
+    processes: Option<&[ProcessEntry]>,
     config: &Config,
 ) -> Result<Action, String> {
     match name {
@@ -184,6 +195,19 @@ fn build_action(
             }
             Ok(Action::KillOrphanedAgents(pids))
         }
+        "kill_runaway_processes" => {
+            let processes = processes
+                .ok_or("internal error: no process list collected for kill_runaway_processes")?;
+            let pids: Vec<u32> = processes
+                .iter()
+                .filter(|process| vitals_core::rules::is_runaway(process, config))
+                .map(|process| process.pid)
+                .collect();
+            if pids.is_empty() {
+                return Err("no runaway processes found".to_string());
+            }
+            Ok(Action::KillRunawayProcesses(pids))
+        }
         "stop_project" => {
             let name = target.ok_or("`stop_project` requires --target <project-name>")?;
             Ok(Action::StopProject(name.to_string()))
@@ -198,7 +222,8 @@ fn build_action(
         "prune_docker_images" => Ok(Action::PruneDockerImages),
         other => Err(format!(
             "unknown action `{other}` (expected one of: poweroff, stop_project, stop_backup, \
-             add_exclusions, kill_orphaned_agents, kill_session, prune_docker_images)"
+             add_exclusions, kill_orphaned_agents, kill_runaway_processes, kill_session, \
+             prune_docker_images)"
         )),
     }
 }
@@ -326,8 +351,8 @@ mod tests {
     use super::*;
     use vitals_core::config::Config;
     use vitals_core::types::{
-        AcpAgent, CoreCount, DdevInfo, DockerInfo, LoadAverage, MemoryInfo, PressureLevel,
-        ProcessesInfo, SystemInfo, TimeMachineInfo,
+        AcpAgent, CoreCount, CpuUsage, DdevInfo, DockerInfo, LoadAverage, MemoryInfo,
+        PressureLevel, ProcessesInfo, SystemInfo, TimeMachineInfo,
     };
 
     #[test]
@@ -364,11 +389,13 @@ mod tests {
                 memory: MemoryInfo {
                     pressure_level: PressureLevel::Normal,
                     free_percent: 36,
+                    used_percent: 64,
                     page_size_bytes: 16384,
                     compressor_bytes: 10_905_550_848,
                     swap_used_bytes: 21_690_548_224,
                     pageouts: 7_301_205,
                 },
+                cpu: CpuUsage::default(),
             },
             time_machine: TimeMachineInfo {
                 running: false,
@@ -480,7 +507,7 @@ mod tests {
     fn build_action_poweroff_needs_no_target_or_report() {
         let config = Config::default();
         assert_eq!(
-            build_action("poweroff", None, None, &config).unwrap(),
+            build_action("poweroff", None, None, None, &config).unwrap(),
             Action::Poweroff
         );
     }
@@ -489,7 +516,7 @@ mod tests {
     fn build_action_stop_backup_needs_no_target_or_report() {
         let config = Config::default();
         assert_eq!(
-            build_action("stop_backup", None, None, &config).unwrap(),
+            build_action("stop_backup", None, None, None, &config).unwrap(),
             Action::StopBackup
         );
     }
@@ -499,7 +526,7 @@ mod tests {
         let mut config = Config::default();
         config.watch.timemachine_exclusions = vec!["~/.orbstack".to_string()];
         assert_eq!(
-            build_action("add_exclusions", None, None, &config).unwrap(),
+            build_action("add_exclusions", None, None, None, &config).unwrap(),
             Action::AddExclusions(vec!["~/.orbstack".to_string()])
         );
     }
@@ -507,7 +534,7 @@ mod tests {
     #[test]
     fn build_action_add_exclusions_errors_when_none_configured() {
         let config = Config::default();
-        assert!(build_action("add_exclusions", None, None, &config).is_err());
+        assert!(build_action("add_exclusions", None, None, None, &config).is_err());
     }
 
     #[test]
@@ -529,7 +556,7 @@ mod tests {
         ];
         let config = Config::default();
         assert_eq!(
-            build_action("kill_orphaned_agents", None, Some(&report), &config).unwrap(),
+            build_action("kill_orphaned_agents", None, Some(&report), None, &config).unwrap(),
             Action::KillOrphanedAgents(vec![1])
         );
     }
@@ -538,21 +565,73 @@ mod tests {
     fn build_action_kill_orphaned_agents_errors_when_none_found() {
         let report = sample_report(Vec::new());
         let config = Config::default();
-        assert!(build_action("kill_orphaned_agents", None, Some(&report), &config).is_err());
+        assert!(build_action("kill_orphaned_agents", None, Some(&report), None, &config).is_err());
     }
 
     #[test]
     fn build_action_kill_orphaned_agents_errors_without_a_report() {
         let config = Config::default();
-        assert!(build_action("kill_orphaned_agents", None, None, &config).is_err());
+        assert!(build_action("kill_orphaned_agents", None, None, None, &config).is_err());
+    }
+
+    fn sample_process(pid: u32, cpu_percent: f64, etime_seconds: u64) -> ProcessEntry {
+        ProcessEntry {
+            pid,
+            ppid: 0,
+            etime_seconds,
+            cpu_percent,
+            rss_bytes: 0,
+            comm: "/usr/bin/stuck".to_string(),
+            command: "/usr/bin/stuck".to_string(),
+        }
+    }
+
+    #[test]
+    fn build_action_kill_runaway_processes_collects_runaway_pids() {
+        let processes = vec![
+            sample_process(4242, 750.0, 21 * 60),
+            sample_process(4243, 5.0, 21 * 60),
+        ];
+        let config = Config::default();
+        assert_eq!(
+            build_action(
+                "kill_runaway_processes",
+                None,
+                None,
+                Some(&processes),
+                &config
+            )
+            .unwrap(),
+            Action::KillRunawayProcesses(vec![4242])
+        );
+    }
+
+    #[test]
+    fn build_action_kill_runaway_processes_errors_when_none_found() {
+        let processes = vec![sample_process(1, 5.0, 20 * 60)];
+        let config = Config::default();
+        assert!(build_action(
+            "kill_runaway_processes",
+            None,
+            None,
+            Some(&processes),
+            &config
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn build_action_kill_runaway_processes_errors_without_a_process_list() {
+        let config = Config::default();
+        assert!(build_action("kill_runaway_processes", None, None, None, &config).is_err());
     }
 
     #[test]
     fn build_action_stop_project_requires_target() {
         let config = Config::default();
-        assert!(build_action("stop_project", None, None, &config).is_err());
+        assert!(build_action("stop_project", None, None, None, &config).is_err());
         assert_eq!(
-            build_action("stop_project", Some("witte"), None, &config).unwrap(),
+            build_action("stop_project", Some("witte"), None, None, &config).unwrap(),
             Action::StopProject("witte".to_string())
         );
     }
@@ -560,9 +639,9 @@ mod tests {
     #[test]
     fn build_action_kill_session_parses_pid() {
         let config = Config::default();
-        assert!(build_action("kill_session", Some("not-a-pid"), None, &config).is_err());
+        assert!(build_action("kill_session", Some("not-a-pid"), None, None, &config).is_err());
         assert_eq!(
-            build_action("kill_session", Some("90548"), None, &config).unwrap(),
+            build_action("kill_session", Some("90548"), None, None, &config).unwrap(),
             Action::KillSession(90548)
         );
     }
@@ -570,14 +649,14 @@ mod tests {
     #[test]
     fn build_action_rejects_unknown_action() {
         let config = Config::default();
-        assert!(build_action("launch_the_missiles", None, None, &config).is_err());
+        assert!(build_action("launch_the_missiles", None, None, None, &config).is_err());
     }
 
     #[test]
     fn build_action_prune_docker_images_needs_no_target_or_report() {
         let config = Config::default();
         assert_eq!(
-            build_action("prune_docker_images", None, None, &config).unwrap(),
+            build_action("prune_docker_images", None, None, None, &config).unwrap(),
             Action::PruneDockerImages
         );
     }

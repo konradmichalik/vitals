@@ -62,6 +62,15 @@ some rules (e.g. detecting an active Mutagen sync) need data that never makes it
 the persisted §6 JSON contract. Add a new rule by writing another `fn -> Option<Finding>`,
 adding it to the array in `evaluate`, and a fixture-based test in the same file.
 
+`runaway_processes` scans that raw table for anything sustaining unusually high CPU
+(`thresholds.runaway_cpu_percent`/`runaway_min_minutes`, both deliberately high — `ps`'s
+`%CPU` is already a lifetime average, so a brief burst can't trigger it, but legitimately
+heavy tools like a `docker build` or video export still can; expect to tune these from
+real experience rather than trust the defaults blindly). Its classification predicate,
+`rules::is_runaway`, is `pub` and reused by the CLI's `--fix kill_runaway_processes`
+action-building (`cli/src/main.rs`) so a fresh process snapshot is re-classified with the
+exact same rule the finding used, rather than trusting a possibly-stale PID list.
+
 ## Config
 
 `core/src/config.rs` loads `~/.vitals.toml`. All sections have `#[serde(default)]`, so

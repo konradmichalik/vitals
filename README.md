@@ -56,6 +56,7 @@ vitals --fix stop_project --target witte       # DDEV project name
 vitals --fix kill_session --target 90548       # a specific PID
 vitals --fix kill_orphaned_agents --dry-run    # preview without running it
 vitals --fix prune_docker_images               # docker image prune -f (dangling only, no -a)
+vitals --fix kill_runaway_processes            # TERM, then KILL after a grace period if still alive
 ```
 
 Every action asks for confirmation first unless `actions.require_confirmation = false`
@@ -81,9 +82,9 @@ dropdown listing metrics and findings. Actions run through the installed `vitals
 binary (`Process` + `--fix <action> --yes`, after the app's own confirmation dialog) —
 `core` never prompts or reads stdin; only the CLI does, and only without `--yes`. Only
 target-less actions (`poweroff`, `stop_backup`, `add_exclusions`,
-`kill_orphaned_agents`, `prune_docker_images`) get a "Run" button; `stop_project`/
-`kill_session` need a target the JSON contract doesn't carry, so they're shown as text
-only.
+`kill_orphaned_agents`, `prune_docker_images`, `kill_runaway_processes`) get a "Run"
+button; `stop_project`/`kill_session` need a target the JSON contract doesn't carry, so
+they're shown as text only.
 
 The gear icon opens Settings: launch-at-login (via `SMAppService`, no separate helper
 app needed) and a toggle for system notifications when a finding newly becomes

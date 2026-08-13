@@ -26,6 +26,7 @@ pub fn evaluate(
         unmanaged_docker_containers(report),
         reclaimable_docker_images(report, config),
         load_status(report, config),
+        runaway_processes(processes, config),
     ]
     .into_iter()
     .flatten()
@@ -187,6 +188,52 @@ fn mutagen_active(processes: &[ProcessEntry]) -> Option<Finding> {
     })
 }
 
+/// Scans the full raw process table (unlike the curated `acp_agents`/
+/// `claude_sessions` lists other rules use) for anything sustaining
+/// unusually high CPU — a category no other rule covers, since those are
+/// all keyed to a specific known tool. Names each offender by resolved
+/// executable name and PID, never just "a process", matching this
+/// module's convention.
+/// Shared with the CLI's `--fix kill_runaway_processes` action-building,
+/// so the two never drift: the CLI has to re-derive PIDs from a fresh
+/// process list rather than trust a stale one from an earlier report, and
+/// it must classify "runaway" exactly the way this rule did or it could
+/// kill something this rule never actually flagged.
+pub fn is_runaway(process: &ProcessEntry, config: &Config) -> bool {
+    let min_seconds = (config.thresholds.runaway_min_minutes * 60.0) as u64;
+    process.cpu_percent > config.thresholds.runaway_cpu_percent
+        && process.etime_seconds > min_seconds
+}
+
+fn runaway_processes(processes: &[ProcessEntry], config: &Config) -> Option<Finding> {
+    let mut offenders: Vec<&ProcessEntry> =
+        processes.iter().filter(|p| is_runaway(p, config)).collect();
+
+    if offenders.is_empty() {
+        return None;
+    }
+    offenders.sort_by(|a, b| b.cpu_percent.total_cmp(&a.cpu_percent));
+
+    let names: Vec<String> = offenders
+        .iter()
+        .map(|p| {
+            let name = p.comm.rsplit('/').next().unwrap_or(&p.comm);
+            format!("{name} (pid {}, {:.0}% CPU)", p.pid, p.cpu_percent)
+        })
+        .collect();
+
+    Some(Finding {
+        rule: "runaway_processes".to_string(),
+        severity: Severity::Warn,
+        message: format!(
+            "{} process(es) sustaining unusually high CPU: {}",
+            offenders.len(),
+            names.join(", ")
+        ),
+        actions: vec!["kill_runaway_processes".to_string()],
+    })
+}
+
 fn uptime_ballast(report: &VitalsReport, config: &Config) -> Option<Finding> {
     let thresholds = &config.thresholds;
     let compressor_warn_bytes = (thresholds.compressor_warn_gb * 1024.0 * 1024.0 * 1024.0) as u64;
@@ -275,9 +322,9 @@ fn ddev_project_problems(report: &VitalsReport) -> Option<Finding> {
 mod tests {
     use super::*;
     use crate::types::{
-        AcpAgent, ClaudeSession, CoreCount, DdevInfo, DockerContainer, DockerInfo, LoadAverage,
-        MemoryInfo, OrbstackProcess, PressureLevel, ProcessesInfo, SystemInfo, TimeMachineInfo,
-        TmExclusion,
+        AcpAgent, ClaudeSession, CoreCount, CpuUsage, DdevInfo, DockerContainer, DockerInfo,
+        LoadAverage, MemoryInfo, OrbstackProcess, PressureLevel, ProcessesInfo, SystemInfo,
+        TimeMachineInfo, TmExclusion,
     };
 
     fn base_report() -> VitalsReport {
@@ -299,11 +346,13 @@ mod tests {
                 memory: MemoryInfo {
                     pressure_level: PressureLevel::Normal,
                     free_percent: 50,
+                    used_percent: 50,
                     page_size_bytes: 16384,
                     compressor_bytes: 0,
                     swap_used_bytes: 0,
                     pageouts: 0,
                 },
+                cpu: CpuUsage::default(),
             },
             time_machine: TimeMachineInfo {
                 running: false,
@@ -472,6 +521,66 @@ mod tests {
         let config = Config::default();
 
         assert!(!finds(&report, &processes, &config, "mutagen_active"));
+    }
+
+    fn sustained_process(
+        pid: u32,
+        comm: &str,
+        cpu_percent: f64,
+        etime_seconds: u64,
+    ) -> ProcessEntry {
+        ProcessEntry {
+            pid,
+            ppid: 0,
+            etime_seconds,
+            cpu_percent,
+            rss_bytes: 0,
+            comm: comm.to_string(),
+            command: comm.to_string(),
+        }
+    }
+
+    #[test]
+    fn runaway_processes_fires_on_sustained_high_cpu() {
+        let report = base_report();
+        let processes = vec![sustained_process(
+            4242,
+            "/usr/bin/stuck-loop",
+            750.0,
+            21 * 60,
+        )];
+        let config = Config::default();
+
+        let finding = evaluate(&report, &processes, &config)
+            .into_iter()
+            .find(|f| f.rule == "runaway_processes")
+            .unwrap();
+        assert_eq!(finding.severity, Severity::Warn);
+        assert!(finding.message.contains("stuck-loop"));
+        assert!(finding.message.contains("4242"));
+        assert!(finding
+            .actions
+            .contains(&"kill_runaway_processes".to_string()));
+    }
+
+    #[test]
+    fn runaway_processes_is_silent_below_cpu_threshold() {
+        let report = base_report();
+        let processes = vec![sustained_process(1, "/usr/bin/busy", 50.0, 20 * 60)];
+        let config = Config::default();
+
+        assert!(!finds(&report, &processes, &config, "runaway_processes"));
+    }
+
+    #[test]
+    fn runaway_processes_is_silent_for_a_brief_startup_burst() {
+        let report = base_report();
+        // High CPU, but has only been running 1 minute — a build tool
+        // maxing out cores right after starting, not a runaway process.
+        let processes = vec![sustained_process(1, "/usr/bin/compiler", 750.0, 60)];
+        let config = Config::default();
+
+        assert!(!finds(&report, &processes, &config, "runaway_processes"));
     }
 
     #[test]

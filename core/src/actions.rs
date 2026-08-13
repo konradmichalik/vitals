@@ -12,6 +12,7 @@ pub enum Action {
     StopBackup,
     AddExclusions(Vec<String>),
     KillOrphanedAgents(Vec<u32>),
+    KillRunawayProcesses(Vec<u32>),
     KillSession(u32),
     /// Deliberately the conservative, non-`-a` prune: only removes
     /// dangling (untagged) images no container still references, never
@@ -31,6 +32,7 @@ impl Action {
             Action::StopBackup => "tmutil stopbackup".to_string(),
             Action::AddExclusions(paths) => format!("tmutil addexclusion {}", paths.join(" ")),
             Action::KillOrphanedAgents(pids) => format!("kill {}", join_pids(pids)),
+            Action::KillRunawayProcesses(pids) => format!("kill {}", join_pids(pids)),
             Action::KillSession(pid) => format!("kill {pid}"),
             Action::PruneDockerImages => "docker image prune -f".to_string(),
         }
@@ -47,6 +49,9 @@ impl Action {
                 shell::run("tmutil", &args).map(drop)
             }
             Action::KillOrphanedAgents(pids) => pids
+                .iter()
+                .try_for_each(|&pid| terminate_with_escalation(pid)),
+            Action::KillRunawayProcesses(pids) => pids
                 .iter()
                 .try_for_each(|&pid| terminate_with_escalation(pid)),
             Action::KillSession(pid) => terminate_with_escalation(*pid),
@@ -109,6 +114,12 @@ mod tests {
     fn describes_kill_orphaned_agents_with_all_pids() {
         let action = Action::KillOrphanedAgents(vec![98823, 98824]);
         assert_eq!(action.describe(), "kill 98823 98824");
+    }
+
+    #[test]
+    fn describes_kill_runaway_processes_with_all_pids() {
+        let action = Action::KillRunawayProcesses(vec![4242, 4243]);
+        assert_eq!(action.describe(), "kill 4242 4243");
     }
 
     #[test]

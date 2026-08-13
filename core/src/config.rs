@@ -38,6 +38,20 @@ pub struct Thresholds {
     pub stale_session_days: f64,
     pub changed_items_warn: u64,
     pub docker_reclaimable_warn_gb: f64,
+    /// 700% = sustained across 7 full cores. Deliberately very high:
+    /// legitimate heavy work (a `docker build`, video export, OrbStack
+    /// itself under real container load) routinely sustains several
+    /// cores' worth of CPU for a while — confirmed live during
+    /// development, where a lower default flagged OrbStack's own helper
+    /// process under normal DDEV usage. `ps`'s `%CPU` is already a
+    /// lifetime average, not an instant snapshot, so a process only
+    /// reads this high if it's genuinely been busy nearly the whole time
+    /// it's been measured over.
+    pub runaway_cpu_percent: f64,
+    /// Paired with `runaway_cpu_percent` so a brief startup burst (e.g. a
+    /// build tool maxing out cores for its first minute) doesn't count —
+    /// only sustained load past this age does.
+    pub runaway_min_minutes: f64,
 }
 
 impl Default for Thresholds {
@@ -50,6 +64,8 @@ impl Default for Thresholds {
             stale_session_days: 3.0,
             changed_items_warn: 20_000,
             docker_reclaimable_warn_gb: 5.0,
+            runaway_cpu_percent: 700.0,
+            runaway_min_minutes: 20.0,
         }
     }
 }
@@ -125,6 +141,8 @@ uptime_warn_days = 7
 stale_session_days = 3
 changed_items_warn = 20000
 docker_reclaimable_warn_gb = 10
+runaway_cpu_percent = 400
+runaway_min_minutes = 15
 
 [actions]
 require_confirmation = true
@@ -140,6 +158,8 @@ require_confirmation = true
         );
         assert_eq!(config.thresholds.changed_items_warn, 20_000);
         assert_eq!(config.thresholds.docker_reclaimable_warn_gb, 10.0);
+        assert_eq!(config.thresholds.runaway_cpu_percent, 400.0);
+        assert_eq!(config.thresholds.runaway_min_minutes, 15.0);
         assert!(config.actions.require_confirmation);
     }
 
