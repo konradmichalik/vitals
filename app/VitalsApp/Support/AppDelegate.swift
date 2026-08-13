@@ -96,8 +96,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         if popover.isShown {
             popover.performClose(nil)
         } else {
+            // `.transient` dismisses on an outside click via NSPopover's
+            // own event monitor, set up as part of showing the popover
+            // and taking key window status — manually forcing
+            // `.becomeKey()` on its window right after `.show()` (the
+            // previous code here) stepped on that internal setup, so
+            // outside clicks never dismissed it. Activating the app
+            // first is the standard way an accessory app's popover gets
+            // real focus without needing to manage window key status by
+            // hand.
+            NSApp.activate(ignoringOtherApps: true)
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-            popover.contentViewController?.view.window?.becomeKey()
         }
     }
 
