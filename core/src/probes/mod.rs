@@ -7,6 +7,7 @@
 //! each implementation must guard against.
 
 pub mod cores;
+pub mod cpu;
 pub mod ddev;
 pub mod docker;
 pub mod load;

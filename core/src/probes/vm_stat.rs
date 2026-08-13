@@ -12,6 +12,7 @@ pub struct VmStat {
     pub free_pages: u64,
     pub active_pages: u64,
     pub inactive_pages: u64,
+    pub wired_pages: u64,
     pub compressor_pages: u64,
     pub pageins: u64,
     pub pageouts: u64,
@@ -20,6 +21,17 @@ pub struct VmStat {
 impl VmStat {
     pub fn compressor_bytes(&self) -> u64 {
         self.compressor_pages * self.page_size_bytes
+    }
+
+    /// What's actually "in use" in the sense most memory tools mean it —
+    /// active + wired + compressed. Free pages are deliberately excluded
+    /// from that definition (and so isn't a factor here): macOS keeps
+    /// unused RAM working as reclaimable disk cache rather than sitting
+    /// idle, so free/inactive pages routinely stay near zero on a
+    /// perfectly healthy machine (§7's pressure-level-over-free-percent
+    /// rationale, applied to this figure too).
+    pub fn used_bytes(&self) -> u64 {
+        (self.active_pages + self.wired_pages + self.compressor_pages) * self.page_size_bytes
     }
 }
 
@@ -46,6 +58,7 @@ fn parse(raw: &str) -> Result<VmStat, VitalsError> {
     let mut free_pages = None;
     let mut active_pages = None;
     let mut inactive_pages = None;
+    let mut wired_pages = None;
     let mut compressor_pages = None;
     let mut pageins = None;
     let mut pageouts = None;
@@ -64,6 +77,7 @@ fn parse(raw: &str) -> Result<VmStat, VitalsError> {
             "Pages free" => free_pages = Some(value),
             "Pages active" => active_pages = Some(value),
             "Pages inactive" => inactive_pages = Some(value),
+            "Pages wired down" => wired_pages = Some(value),
             "Pages occupied by compressor" => compressor_pages = Some(value),
             "Pageins" => pageins = Some(value),
             "Pageouts" => pageouts = Some(value),
@@ -76,6 +90,7 @@ fn parse(raw: &str) -> Result<VmStat, VitalsError> {
         free_pages: free_pages.ok_or_else(|| parse_error("missing `Pages free`"))?,
         active_pages: active_pages.ok_or_else(|| parse_error("missing `Pages active`"))?,
         inactive_pages: inactive_pages.ok_or_else(|| parse_error("missing `Pages inactive`"))?,
+        wired_pages: wired_pages.ok_or_else(|| parse_error("missing `Pages wired down`"))?,
         compressor_pages: compressor_pages
             .ok_or_else(|| parse_error("missing `Pages occupied by compressor`"))?,
         pageins: pageins.ok_or_else(|| parse_error("missing `Pageins`"))?,
@@ -119,9 +134,22 @@ Swapouts:                                  366283234.
         assert_eq!(stat.free_pages, 4070);
         assert_eq!(stat.active_pages, 288618);
         assert_eq!(stat.inactive_pages, 285091);
+        assert_eq!(stat.wired_pages, 339242);
         assert_eq!(stat.compressor_pages, 608855);
         assert_eq!(stat.pageins, 503523652);
         assert_eq!(stat.pageouts, 7332338);
+    }
+
+    #[test]
+    fn used_bytes_sums_active_wired_and_compressor_pages() {
+        let stat = VmStat {
+            page_size_bytes: 16384,
+            active_pages: 100,
+            wired_pages: 50,
+            compressor_pages: 10,
+            ..VmStat::default()
+        };
+        assert_eq!(stat.used_bytes(), (100 + 50 + 10) * 16384);
     }
 
     #[test]

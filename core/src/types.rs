@@ -26,6 +26,7 @@ pub struct SystemInfo {
     pub load: LoadAverage,
     pub cores: CoreCount,
     pub memory: MemoryInfo,
+    pub cpu: CpuUsage,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -33,6 +34,14 @@ pub struct LoadAverage {
     pub m1: f64,
     pub m5: f64,
     pub m15: f64,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CpuUsage {
+    pub user_percent: f64,
+    pub system_percent: f64,
+    pub idle_percent: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -55,6 +64,13 @@ pub enum PressureLevel {
 pub struct MemoryInfo {
     pub pressure_level: PressureLevel,
     pub free_percent: u8,
+    /// active + wired + compressed, as a percent of total — what other
+    /// memory tools (Activity Monitor, Stats) mean by "memory used".
+    /// `free_percent` alone reads as near-0% on any long-running Mac
+    /// (§7: unused RAM works as reclaimable disk cache, it isn't idle),
+    /// which looks like a red flag but isn't one — this is the number
+    /// worth actually displaying.
+    pub used_percent: u8,
     pub page_size_bytes: u64,
     pub compressor_bytes: u64,
     pub swap_used_bytes: u64,

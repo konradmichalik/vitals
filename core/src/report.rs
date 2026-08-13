@@ -22,18 +22,22 @@ pub fn collect(config: &Config) -> Result<(types::VitalsReport, Vec<ProcessEntry
 
     let memory = types::MemoryInfo {
         pressure_level: probes::memory::pressure_level()?,
-        free_percent: free_percent(free_bytes, total_bytes),
+        free_percent: percent_of(free_bytes, total_bytes),
+        used_percent: percent_of(vm_stat.used_bytes(), total_bytes),
         page_size_bytes: vm_stat.page_size_bytes,
         compressor_bytes: vm_stat.compressor_bytes(),
         swap_used_bytes: swap.used_bytes,
         pageouts: vm_stat.pageouts,
     };
 
+    let cpu = probes::cpu::read()?;
+
     let system = types::SystemInfo {
         uptime_seconds,
         load,
         cores,
         memory,
+        cpu,
     };
 
     let tm_status = probes::time_machine::status()?;
@@ -75,11 +79,11 @@ pub fn collect(config: &Config) -> Result<(types::VitalsReport, Vec<ProcessEntry
     Ok((report, process_entries))
 }
 
-fn free_percent(free_bytes: u64, total_bytes: u64) -> u8 {
+fn percent_of(part_bytes: u64, total_bytes: u64) -> u8 {
     if total_bytes == 0 {
         return 0;
     }
-    ((free_bytes as f64 / total_bytes as f64) * 100.0)
+    ((part_bytes as f64 / total_bytes as f64) * 100.0)
         .round()
         .clamp(0.0, 100.0) as u8
 }
@@ -98,17 +102,17 @@ mod tests {
     use super::*;
 
     #[test]
-    fn computes_free_percent() {
-        assert_eq!(free_percent(6_442_450_944, 25_769_803_776), 25);
+    fn computes_percent_of() {
+        assert_eq!(percent_of(6_442_450_944, 25_769_803_776), 25);
     }
 
     #[test]
-    fn free_percent_of_zero_total_is_zero() {
-        assert_eq!(free_percent(1024, 0), 0);
+    fn percent_of_zero_total_is_zero() {
+        assert_eq!(percent_of(1024, 0), 0);
     }
 
     #[test]
-    fn free_percent_rounds_to_nearest() {
-        assert_eq!(free_percent(1, 3), 33);
+    fn percent_of_rounds_to_nearest() {
+        assert_eq!(percent_of(1, 3), 33);
     }
 }
