@@ -9,6 +9,7 @@ final class AppState: ObservableObject {
     @Published private(set) var report: VitalsReport?
     @Published private(set) var lastError: VitalsCollectError?
     @Published private(set) var lastUpdated: Date?
+    @Published private(set) var history: [MetricSample] = []
 
     @AppStorage(CriticalFindingNotifier.storageKey) private var notifyOnCritical = true
     private var lastCriticalRules: Set<String> = []
@@ -36,6 +37,7 @@ final class AppState: ObservableObject {
         case .success(let report):
             self.report = report
             self.lastError = nil
+            history = MetricHistory.appending(.from(report: report), to: history)
             notifyAboutNewCriticalFindings(in: report.findings)
         case .failure(let error):
             self.lastError = error

@@ -121,38 +121,14 @@ struct MenubarView: View {
     /// own vibrancy material, so a matching-color border makes the
     /// boundary actually visible.
     private func metricsSection(_ report: VitalsReport) -> some View {
-        let load = report.system.load
-        let cores = report.system.cores
-        let status = LoadStatus.evaluate(load1: load.m1, performanceCores: cores.performance)
-        let fraction = LoadStatus.progressFraction(load1: load.m1, performanceCores: cores.performance)
+        let status = LoadStatus.evaluate(load1: report.system.load.m1, performanceCores: report.system.cores.performance)
 
         return VStack(alignment: .leading, spacing: 10) {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    sectionHeader("gauge.medium", "Load average")
-                    Spacer()
-                    Text(status.label)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(status.color)
-                }
-                ProgressView(value: fraction)
-                    .tint(status.color)
-                // htop-style single label rather than per-number labels
-                // — the 1/5/15m order is well-established and per-number
-                // labels just add noise. The caption below explains what
-                // the raw Unix convention actually means — the numbers
-                // alone don't.
-                Text(String(format: "%.2f · %.2f · %.2f", load.m1, load.m5, load.m15))
-                    .font(.callout.weight(.bold))
-                    .foregroundStyle(status.color)
-                Text(
-                    "1/5/15 min avg — processes waiting for a CPU core, " +
-                    "relative to \(cores.performance) performance cores"
-                )
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
-                .fixedSize(horizontal: false, vertical: true)
-            }
+            loadSection(report, status: status)
+
+            Divider()
+
+            cpuMemorySection(report)
 
             Divider()
 
@@ -169,6 +145,89 @@ struct MenubarView: View {
             RoundedRectangle(cornerRadius: 8)
                 .strokeBorder(status.color.opacity(0.25), lineWidth: 1)
         )
+    }
+
+    private func loadSection(_ report: VitalsReport, status: LoadStatus) -> some View {
+        let load = report.system.load
+        let cores = report.system.cores
+        let fraction = LoadStatus.progressFraction(load1: load.m1, performanceCores: cores.performance)
+
+        return VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                sectionHeader("gauge.medium", "Load average")
+                Spacer()
+                Text(status.label)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(status.color)
+            }
+            ProgressView(value: fraction)
+                .tint(status.color)
+            // htop-style single label rather than per-number labels — the
+            // 1/5/15m order is well-established and per-number labels
+            // just add noise. The caption below explains what the raw
+            // Unix convention actually means — the numbers alone don't.
+            Text(String(format: "%.2f · %.2f · %.2f", load.m1, load.m5, load.m15))
+                .font(.callout.weight(.bold))
+                .foregroundStyle(status.color)
+            Sparkline(values: appState.history.map(\.load), color: status.color) { index in
+                let sample = appState.history[index]
+                return String(format: "%.2f · %@", sample.load, sample.loadStatus.label)
+            }
+            Text(
+                "1/5/15 min avg — processes waiting for a CPU core, " +
+                "relative to \(cores.performance) performance cores"
+            )
+            .font(.caption2)
+            .foregroundStyle(.tertiary)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func cpuMemorySection(_ report: VitalsReport) -> some View {
+        let cpuUsedPercent = Int((100 - report.system.cpu.idlePercent).rounded())
+        let memColor = memoryColor(report.system.memory.pressureLevel)
+
+        return VStack(alignment: .leading, spacing: 6) {
+            sectionHeader("cpu", "CPU & Memory")
+            HStack {
+                Text("\(cpuUsedPercent)% CPU")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text("· \(report.system.memory.usedPercent)% RAM used")
+                    .font(.caption)
+                    .foregroundStyle(memColor)
+            }
+            DualSparkline(
+                primaryValues: appState.history.map(\.cpuUsedPercent),
+                primaryColor: .secondary,
+                secondaryValues: appState.history.map(\.memoryUsedPercent),
+                secondaryColor: memColor
+            ) { index in
+                let sample = appState.history[index]
+                return "\(Int(sample.cpuUsedPercent))% CPU · \(Int(sample.memoryUsedPercent))% RAM (\(pressureLabel(sample.memoryPressure)))"
+            }
+        }
+    }
+
+    /// Mirrors `LoadStatus`/`TrafficLight`'s color language for the
+    /// warn/critical escalation, but `.normal` gets its own blue (not
+    /// `.secondary`) — the CPU line right next to it in the combined
+    /// sparkline is already `.secondary`, and both being gray made the
+    /// two lines indistinguishable whenever memory pressure was normal.
+    private func memoryColor(_ level: PressureLevel) -> Color {
+        switch level {
+        case .normal: return .blue
+        case .warn: return .orange
+        case .critical: return .red
+        }
+    }
+
+    private func pressureLabel(_ level: PressureLevel) -> String {
+        switch level {
+        case .normal: return "normal"
+        case .warn: return "warn"
+        case .critical: return "critical"
+        }
     }
 
     @ViewBuilder
