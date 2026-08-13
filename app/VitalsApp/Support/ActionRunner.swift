@@ -26,7 +26,7 @@ enum ActionRunner {
     /// actions get a "Run" button; everything else is shown as plain text.
     static let runnableActions: Set<String> = [
         "poweroff", "stop_backup", "add_exclusions", "kill_orphaned_agents",
-        "prune_docker_images",
+        "prune_docker_images", "kill_runaway_processes",
     ]
 
     static func buildArguments(action: String, target: String?) -> [String] {

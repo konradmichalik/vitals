@@ -41,4 +41,8 @@ final class ActionRunnerTests: XCTestCase {
     func testPruneDockerImagesIsRunnable() {
         XCTAssertTrue(ActionRunner.runnableActions.contains("prune_docker_images"))
     }
+
+    func testKillRunawayProcessesIsRunnable() {
+        XCTAssertTrue(ActionRunner.runnableActions.contains("kill_runaway_processes"))
+    }
 }
