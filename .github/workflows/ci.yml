@@ -6,7 +6,7 @@ on:
   pull_request:
 
 jobs:
-  test:
+  rust:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,3 +20,20 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: test
         run: cargo test --workspace
+
+  swift:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      # vitals-ffi is ad-hoc signed (project.yml sets CODE_SIGN_IDENTITY
+      # "-" / DEVELOPMENT_TEAM "" directly, no Apple Developer account) —
+      # no signing-related flags needed here, unlike setups that rely on
+      # a per-machine Xcode account for signing.
+      - name: Install tooling
+        run: brew install xcodegen swiftlint
+      - name: Test
+        run: make -C app test
+      - name: Lint
+        run: make -C app lint-swift
