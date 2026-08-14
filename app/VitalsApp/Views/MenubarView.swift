@@ -342,7 +342,7 @@ struct MenubarView: View {
             case .success(let output):
                 message = output.isEmpty ? "Done: \(action)" : output
             case .failure(let error):
-                message = "Failed: \(error)"
+                message = error.message
             }
             // A system notification rather than inline text in the
             // dropdown — actions run detached and the dropdown is very

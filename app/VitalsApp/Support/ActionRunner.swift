@@ -10,13 +10,44 @@ enum ActionRunnerError: Error, Equatable {
     case vitalsNotFound
     case launchFailed(String)
     case nonZeroExit(String)
+
+    /// Notifications previously interpolated the case itself, so the user
+    /// read "Failed: vitalsNotFound" — a symbol name, not an explanation
+    /// of what went wrong or what to do about it.
+    var message: String {
+        switch self {
+        case .vitalsNotFound:
+            return "Couldn't find the vitals command line tool "
+                + "(looked in /opt/homebrew/bin, /usr/local/bin and your PATH)."
+        case .launchFailed(let reason):
+            return "Couldn't start the vitals command line tool: \(reason)"
+        case .nonZeroExit(let output):
+            let trimmed = output.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? "The action failed without reporting a reason." : trimmed
+        }
+    }
 }
 
 enum ActionRunner {
-    private static let candidatePaths = [
+    /// Homebrew's two install locations stay ahead of PATH: PATH is
+    /// searched as a fallback for non-standard installs, but letting it
+    /// win would let an unrelated `vitals` earlier in PATH shadow the
+    /// real one.
+    private static let knownInstallPaths = [
         "/opt/homebrew/bin/vitals",
         "/usr/local/bin/vitals",
     ]
+
+    static func candidatePaths(
+        pathEnvironment: String? = ProcessInfo.processInfo.environment["PATH"]
+    ) -> [String] {
+        let fromPath = (pathEnvironment ?? "")
+            .split(separator: ":", omittingEmptySubsequences: true)
+            .map { "\($0)/vitals" }
+
+        var seen: Set<String> = []
+        return (knownInstallPaths + fromPath).filter { seen.insert($0).inserted }
+    }
 
     /// A finding's `actions` can include entries that aren't invokable
     /// CLI actions at all (`list_running_projects`, `list_with_age` —
@@ -38,7 +69,7 @@ enum ActionRunner {
     }
 
     static func locateVitalsBinary(
-        candidates: [String] = candidatePaths,
+        candidates: [String] = candidatePaths(),
         fileExists: (String) -> Bool = { FileManager.default.isExecutableFile(atPath: $0) }
     ) -> String? {
         candidates.first(where: fileExists)
