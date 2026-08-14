@@ -8,6 +8,7 @@ import SwiftUI
 /// only the bulk dangling-image prune.
 struct DdevProjectsSection: View {
     let report: VitalsReport
+    let onPoweroff: () -> Void
     let onStop: (String) -> Void
     @State private var isExpanded = false
 
@@ -86,3 +87,21 @@ struct DdevProjectsSection: View {
         }
     }
 }
+            Spacer()
+            // A menu rather than a second header button — bulk actions
+            // are rare enough that a permanently visible button would
+            // just eat space next to the per-project Stop buttons below.
+            if !report.ddev.running.isEmpty {
+                Menu {
+                    Button("Power off all DDEV projects", action: onPoweroff)
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+                .menuStyle(.borderlessButton)
+                // The ellipsis already reads as "there's more here" —
+                // macOS's default disclosure arrow next to it is a second
+                // affordance for the same thing.
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .foregroundStyle(.secondary)
+            }

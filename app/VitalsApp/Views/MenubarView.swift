@@ -130,9 +130,11 @@ struct MenubarView: View {
 
                 Divider()
 
-                DdevProjectsSection(report: report) { project in
-                    pendingAction = PendingAction(action: "stop_project", target: project)
-                }
+                DdevProjectsSection(
+                    report: report,
+                    onPoweroff: { pendingAction = PendingAction(action: "poweroff") },
+                    onStop: { project in pendingAction = PendingAction(action: "stop_project", target: project) }
+                )
 
                 if !report.processes.claudeSessions.isEmpty {
                     Divider()
