@@ -32,6 +32,11 @@ struct MenubarView: View {
 
     private var header: some View {
         HStack(spacing: 8) {
+            Image("VitalsIcon")
+                .resizable()
+                .renderingMode(.template)
+                .frame(width: 16, height: 16)
+                .foregroundStyle(.secondary)
             Text("Vitals")
                 .font(.headline)
             if let report = appState.report {
