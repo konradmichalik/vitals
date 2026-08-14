@@ -24,7 +24,7 @@
 
 ## Features
 
-- **Rule engine** — 12 rules cover Time Machine scanning container data, unexcluded backup paths, container load, Mutagen activity, memory ballast, orphaned PhpStorm ACP agents, stale Claude Code sessions, DDEV projects stuck in a problem state, Docker containers running outside DDEV's management, reclaimable disk space, critical load average, and sustained runaway-CPU processes
+- **Rule engine** — 13 rules cover Time Machine scanning container data, unexcluded backup paths, container load, Mutagen activity, memory pressure, memory ballast, orphaned PhpStorm ACP agents, stale Claude Code sessions, DDEV projects stuck in a problem state, Docker containers running outside DDEV's management, reclaimable disk space, critical load average, and sustained runaway-CPU processes
 - **Named diagnoses, not graphs** — every finding says which project/PID/path is responsible, not just a number
 - **One-shot fixes** — stop a backup, stop a DDEV project, kill a stale session or a runaway process, prune dangling images — always behind a confirmation
 - **JSON contract** — `vitals --json` for scripting, with a full per-container CPU/memory breakdown tagged by DDEV project

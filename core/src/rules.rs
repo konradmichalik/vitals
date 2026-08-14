@@ -7,7 +7,7 @@
 
 use crate::config::Config;
 use crate::probes::processes::ProcessEntry;
-use crate::types::{DockerContainer, Finding, Severity, VitalsReport};
+use crate::types::{DockerContainer, Finding, PressureLevel, Severity, VitalsReport};
 
 pub fn evaluate(
     report: &VitalsReport,
@@ -18,18 +18,22 @@ pub fn evaluate(
         backup_scanning_container_data(report, config),
         backup_paths_not_excluded(report),
         container_load(report, config),
-        mutagen_active(processes),
+        mutagen_active(processes, config),
         uptime_ballast(report, config),
-        orphaned_acp_agents(report),
+        orphaned_acp_agents(report, config),
         stale_claude_sessions(report, config),
         ddev_project_problems(report),
         unmanaged_docker_containers(report),
         reclaimable_docker_images(report, config),
         load_status(report, config),
+        memory_pressure(report),
         runaway_processes(processes, config),
     ]
     .into_iter()
     .flatten()
+    // Filtered here rather than inside each rule so suppression works
+    // uniformly, including for rules that have no threshold to tune.
+    .filter(|finding| !config.rules.ignore.contains(&finding.rule))
     .collect()
 }
 
@@ -108,6 +112,12 @@ fn load_status(report: &VitalsReport, config: &Config) -> Option<Finding> {
         return None;
     };
 
+    let actions = if report.ddev.running.is_empty() {
+        Vec::new()
+    } else {
+        vec!["poweroff".to_string()]
+    };
+
     Some(Finding {
         rule: "load_status".to_string(),
         severity,
@@ -115,7 +125,41 @@ fn load_status(report: &VitalsReport, config: &Config) -> Option<Finding> {
             "Load average is {label} ({:.2} vs {} performance cores)",
             report.system.load.m1, report.system.cores.performance
         ),
-        actions: Vec::new(),
+        actions,
+    })
+}
+
+/// macOS already computes its own memory pressure level, so this echoes
+/// that authoritative signal rather than inventing another threshold —
+/// the raw fields it's derived from (`swap_used_bytes`, `used_percent`)
+/// were collected and displayed but never actually evaluated, so a
+/// machine sitting at warn pressure with tens of GB swapped produced no
+/// finding, no badge and no notification at all.
+fn memory_pressure(report: &VitalsReport) -> Option<Finding> {
+    let memory = &report.system.memory;
+    let (severity, label) = match memory.pressure_level {
+        PressureLevel::Normal => return None,
+        PressureLevel::Warn => (Severity::Warn, "elevated"),
+        PressureLevel::Critical => (Severity::Critical, "critical"),
+    };
+
+    // Powering off DDEV is the only lever here that frees a meaningful
+    // amount of RAM — offering it with nothing running would be a no-op.
+    let actions = if report.ddev.running.is_empty() {
+        Vec::new()
+    } else {
+        vec!["poweroff".to_string()]
+    };
+
+    Some(Finding {
+        rule: "memory_pressure".to_string(),
+        severity,
+        message: format!(
+            "Memory pressure is {label} ({}% used, {:.1} GB swap)",
+            memory.used_percent,
+            memory.swap_used_bytes as f64 / 1024.0 / 1024.0 / 1024.0,
+        ),
+        actions,
     })
 }
 
@@ -161,23 +205,25 @@ fn container_load(report: &VitalsReport, config: &Config) -> Option<Finding> {
         .unwrap_or(0.0);
     let busy = load_exceeds_critical(report, config)
         && !report.time_machine.running
-        && orbstack_cpu > 200.0;
+        && orbstack_cpu > config.thresholds.orbstack_cpu_percent;
 
     busy.then(|| Finding {
         rule: "container_load".to_string(),
         severity: Severity::Critical,
         message: format!(
-            "Container load — {} project(s) running",
-            report.ddev.running.len()
+            "Container load — {} project(s) running: {}",
+            report.ddev.running.len(),
+            report.ddev.running.join(", ")
         ),
-        actions: vec!["list_running_projects".to_string(), "poweroff".to_string()],
+        actions: vec!["poweroff".to_string()],
     })
 }
 
-fn mutagen_active(processes: &[ProcessEntry]) -> Option<Finding> {
-    let active = processes
-        .iter()
-        .any(|process| process.comm.contains("mutagen") && process.cpu_percent > 20.0);
+fn mutagen_active(processes: &[ProcessEntry], config: &Config) -> Option<Finding> {
+    let active = processes.iter().any(|process| {
+        process.comm.contains("mutagen")
+            && process.cpu_percent > config.thresholds.mutagen_cpu_percent
+    });
 
     active.then(|| Finding {
         rule: "mutagen_active".to_string(),
@@ -253,7 +299,7 @@ fn uptime_ballast(report: &VitalsReport, config: &Config) -> Option<Finding> {
     })
 }
 
-fn orphaned_acp_agents(report: &VitalsReport) -> Option<Finding> {
+fn orphaned_acp_agents(report: &VitalsReport, config: &Config) -> Option<Finding> {
     let orphaned: Vec<&str> = report
         .processes
         .acp_agents
@@ -275,7 +321,7 @@ fn orphaned_acp_agents(report: &VitalsReport) -> Option<Finding> {
         });
     }
 
-    (report.processes.acp_agents.len() > 3).then(|| Finding {
+    (report.processes.acp_agents.len() > config.thresholds.acp_agent_warn_count).then(|| Finding {
         rule: "orphaned_acp_agents".to_string(),
         severity: Severity::Warn,
         message: format!(
@@ -302,7 +348,9 @@ fn stale_claude_sessions(report: &VitalsReport, config: &Config) -> Option<Findi
             "{stale_count} Claude Code session(s) older than {} days",
             config.thresholds.stale_session_days
         ),
-        actions: vec!["list_with_age".to_string()],
+        // Informational only — the menubar app lists every session with
+        // its age natively, so there's nothing for `--fix` to run here.
+        actions: Vec::new(),
     })
 }
 
@@ -870,5 +918,278 @@ mod tests {
         let config = Config::default();
 
         assert!(!finds(&report, &[], &config, "load_status"));
+    }
+
+    /// Without this there was no way at all to silence a rule that
+    /// misfires on a given machine — rules with no threshold of their own
+    /// (`unmanaged_docker_containers`) couldn't even be muted indirectly.
+    #[test]
+    fn ignored_rules_are_filtered_out_of_the_result() {
+        let mut report = base_report();
+        report.system.memory.pressure_level = PressureLevel::Critical;
+        let mut config = Config::default();
+        config.rules.ignore = vec!["memory_pressure".to_string()];
+
+        assert!(!finds(&report, &[], &config, "memory_pressure"));
+    }
+
+    #[test]
+    fn ignoring_one_rule_leaves_the_others_firing() {
+        let mut report = base_report();
+        report.system.memory.pressure_level = PressureLevel::Critical;
+        report.system.load.m1 = 25.0;
+        let mut config = Config::default();
+        config.rules.ignore = vec!["memory_pressure".to_string()];
+
+        assert!(finds(&report, &[], &config, "load_status"));
+    }
+
+    #[test]
+    fn orbstack_cpu_threshold_is_configurable() {
+        let mut report = base_report();
+        report.system.load.m1 = 25.0;
+        report.processes.orbstack = Some(OrbstackProcess {
+            pid: 1,
+            cpu_percent: 120.0,
+            rss_bytes: 0,
+        });
+        let mut config = Config::default();
+
+        assert!(
+            !finds(&report, &[], &config, "container_load"),
+            "120% should stay below the 200% default"
+        );
+
+        config.thresholds.orbstack_cpu_percent = 100.0;
+        assert!(finds(&report, &[], &config, "container_load"));
+    }
+
+    #[test]
+    fn mutagen_cpu_threshold_is_configurable() {
+        let report = base_report();
+        let busy = process("mutagen-agent", 15.0);
+        let mut config = Config::default();
+
+        assert!(!finds(&report, &[busy.clone()], &config, "mutagen_active"));
+
+        config.thresholds.mutagen_cpu_percent = 10.0;
+        assert!(finds(&report, &[busy], &config, "mutagen_active"));
+    }
+
+    #[test]
+    fn acp_agent_count_threshold_is_configurable() {
+        let mut report = base_report();
+        report.processes.acp_agents = (0..3)
+            .map(|pid| AcpAgent {
+                pid,
+                etime_seconds: 60,
+                ide_version: "2025.1".to_string(),
+                orphaned: false,
+            })
+            .collect();
+        let mut config = Config::default();
+
+        assert!(
+            !finds(&report, &[], &config, "orphaned_acp_agents"),
+            "3 agents should stay at the default limit"
+        );
+
+        config.thresholds.acp_agent_warn_count = 2;
+        assert!(finds(&report, &[], &config, "orphaned_acp_agents"));
+    }
+
+    /// Replaces the dropped `list_running_projects` hint: naming the
+    /// projects inline beats pointing at a command that never existed.
+    #[test]
+    fn container_load_message_names_the_running_projects() {
+        let mut report = base_report();
+        report.system.load.m1 = 25.0;
+        report.ddev.running = vec!["witte".to_string(), "verdi".to_string()];
+        report.processes.orbstack = Some(OrbstackProcess {
+            pid: 1,
+            cpu_percent: 500.0,
+            rss_bytes: 0,
+        });
+        let config = Config::default();
+
+        let finding = evaluate(&report, &[], &config)
+            .into_iter()
+            .find(|f| f.rule == "container_load")
+            .unwrap();
+        assert!(
+            finding.message.contains("witte"),
+            "got: {}",
+            finding.message
+        );
+        assert!(
+            finding.message.contains("verdi"),
+            "got: {}",
+            finding.message
+        );
+    }
+
+    /// A finding may only advertise an action `vitals --fix` actually
+    /// accepts. `list_running_projects`/`list_with_age` were suggested by
+    /// two rules but existed in neither `Action` nor the CLI's parser, so
+    /// following the tool's own advice failed with "unknown action".
+    #[test]
+    fn every_action_a_rule_suggests_is_a_known_cli_action() {
+        let mut report = base_report();
+        report.system.load.m1 = 25.0;
+        report.system.memory.pressure_level = PressureLevel::Critical;
+        report.time_machine.running = true;
+        report.time_machine.changed_item_count = Some(50_000);
+        report.time_machine.exclusions = vec![TmExclusion {
+            path: "/Users/me/containers".to_string(),
+            excluded: false,
+        }];
+        report.ddev.running = vec!["witte".to_string()];
+        report.ddev.problems = vec!["broken".to_string()];
+        report.docker.dangling_image_count = 12;
+        report.docker.reclaimable_bytes = 20 * 1024 * 1024 * 1024;
+        report.processes.orbstack = Some(OrbstackProcess {
+            pid: 1,
+            cpu_percent: 500.0,
+            rss_bytes: 0,
+        });
+        report.processes.acp_agents = vec![AcpAgent {
+            pid: 2,
+            etime_seconds: 9_000,
+            ide_version: "2025.1".to_string(),
+            orphaned: true,
+        }];
+        report.processes.claude_sessions = vec![ClaudeSession {
+            pid: 3,
+            etime_seconds: 60 * 60 * 24 * 10,
+            cpu_percent: 0.0,
+            rss_bytes: 0,
+            kind: "cli".to_string(),
+            version: "1.0".to_string(),
+            working_directory: None,
+        }];
+        let runaway = ProcessEntry {
+            pid: 4,
+            ppid: 0,
+            etime_seconds: 60 * 60,
+            cpu_percent: 900.0,
+            rss_bytes: 0,
+            comm: "ffmpeg".to_string(),
+            command: "ffmpeg".to_string(),
+        };
+        let config = Config::default();
+
+        let findings = evaluate(&report, &[runaway], &config);
+        // Guard against the report above silently stopping to trigger
+        // the action-carrying rules this test exists to cover.
+        let suggested: Vec<&String> = findings.iter().flat_map(|f| &f.actions).collect();
+        assert!(suggested.len() >= 6, "only got: {suggested:?}");
+
+        for action in suggested {
+            assert!(
+                crate::actions::ACTION_NAMES.contains(&action.as_str()),
+                "rule suggests `{action}`, which `vitals --fix` does not accept"
+            );
+        }
+    }
+
+    /// A "load is critical" finding with no suggested action left the
+    /// user informed but with nothing to do about it — the exact gap
+    /// this tool exists to close.
+    #[test]
+    fn load_status_suggests_poweroff_only_when_ddev_projects_run() {
+        let mut report = base_report();
+        report.system.load.m1 = 19.74;
+        let config = Config::default();
+
+        let without = evaluate(&report, &[], &config)
+            .into_iter()
+            .find(|f| f.rule == "load_status")
+            .unwrap();
+        assert!(without.actions.is_empty(), "got: {:?}", without.actions);
+
+        report.ddev.running = vec!["witte".to_string()];
+        let with = evaluate(&report, &[], &config)
+            .into_iter()
+            .find(|f| f.rule == "load_status")
+            .unwrap();
+        assert_eq!(with.actions, vec!["poweroff".to_string()]);
+    }
+
+    #[test]
+    fn memory_pressure_is_silent_when_macos_reports_normal() {
+        let report = base_report();
+        let config = Config::default();
+
+        assert!(!finds(&report, &[], &config, "memory_pressure"));
+    }
+
+    #[test]
+    fn memory_pressure_warns_when_macos_reports_warn() {
+        let mut report = base_report();
+        report.system.memory.pressure_level = PressureLevel::Warn;
+        let config = Config::default();
+
+        let finding = evaluate(&report, &[], &config)
+            .into_iter()
+            .find(|f| f.rule == "memory_pressure")
+            .unwrap();
+        assert_eq!(finding.severity, Severity::Warn);
+    }
+
+    #[test]
+    fn memory_pressure_is_critical_when_macos_reports_critical() {
+        let mut report = base_report();
+        report.system.memory.pressure_level = PressureLevel::Critical;
+        let config = Config::default();
+
+        let finding = evaluate(&report, &[], &config)
+            .into_iter()
+            .find(|f| f.rule == "memory_pressure")
+            .unwrap();
+        assert_eq!(finding.severity, Severity::Critical);
+    }
+
+    /// The number that makes the diagnosis actionable — "80% used" alone
+    /// reads as normal on any Mac, sustained swap is what actually hurts.
+    #[test]
+    fn memory_pressure_message_names_used_percent_and_swap() {
+        let mut report = base_report();
+        report.system.memory.pressure_level = PressureLevel::Warn;
+        report.system.memory.used_percent = 80;
+        report.system.memory.swap_used_bytes = 17_669_428_347;
+        let config = Config::default();
+
+        let finding = evaluate(&report, &[], &config)
+            .into_iter()
+            .find(|f| f.rule == "memory_pressure")
+            .unwrap();
+        assert!(finding.message.contains("80%"), "got: {}", finding.message);
+        assert!(
+            finding.message.contains("16.5 GB swap"),
+            "got: {}",
+            finding.message
+        );
+    }
+
+    /// Powering off DDEV is the one lever this tool has that actually
+    /// frees RAM — but suggesting it with nothing running is a no-op.
+    #[test]
+    fn memory_pressure_suggests_poweroff_only_when_ddev_projects_run() {
+        let mut report = base_report();
+        report.system.memory.pressure_level = PressureLevel::Warn;
+        let config = Config::default();
+
+        let without = evaluate(&report, &[], &config)
+            .into_iter()
+            .find(|f| f.rule == "memory_pressure")
+            .unwrap();
+        assert!(without.actions.is_empty(), "got: {:?}", without.actions);
+
+        report.ddev.running = vec!["witte".to_string()];
+        let with = evaluate(&report, &[], &config)
+            .into_iter()
+            .find(|f| f.rule == "memory_pressure")
+            .unwrap();
+        assert_eq!(with.actions, vec!["poweroff".to_string()]);
     }
 }

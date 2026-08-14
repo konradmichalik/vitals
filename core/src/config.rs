@@ -14,6 +14,17 @@ pub struct Config {
     pub ide: IdeConfig,
     pub thresholds: Thresholds,
     pub actions: ActionsConfig,
+    pub rules: RulesConfig,
+}
+
+#[derive(Debug, Clone, Deserialize, Default, PartialEq)]
+#[serde(default)]
+pub struct RulesConfig {
+    /// Rule names to suppress entirely. Raising a threshold could only
+    /// ever mute rules that *have* one — `unmanaged_docker_containers`
+    /// and friends had no way to be silenced at all, so a rule that
+    /// misfires on one machine stayed permanently in the way.
+    pub ignore: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Default, PartialEq)]
@@ -52,6 +63,16 @@ pub struct Thresholds {
     /// build tool maxing out cores for its first minute) doesn't count —
     /// only sustained load past this age does.
     pub runaway_min_minutes: f64,
+    /// OrbStack's aggregate CPU above which `container_load` treats the
+    /// container runtime as the thing driving high load. 200% = two full
+    /// cores' worth.
+    pub orbstack_cpu_percent: f64,
+    /// CPU above which a `mutagen` process counts as actively syncing
+    /// rather than idling in the background.
+    pub mutagen_cpu_percent: f64,
+    /// How many ACP agents may run before the count alone reads as a
+    /// leak, independent of whether any is actually orphaned.
+    pub acp_agent_warn_count: usize,
 }
 
 impl Default for Thresholds {
@@ -66,6 +87,9 @@ impl Default for Thresholds {
             docker_reclaimable_warn_gb: 5.0,
             runaway_cpu_percent: 700.0,
             runaway_min_minutes: 20.0,
+            orbstack_cpu_percent: 200.0,
+            mutagen_cpu_percent: 20.0,
+            acp_agent_warn_count: 3,
         }
     }
 }
@@ -122,6 +146,39 @@ mod tests {
     fn empty_input_yields_defaults() {
         let config = parse("", Path::new("test.toml")).unwrap();
         assert_eq!(config, Config::default());
+    }
+
+    /// Pins the TOML surface for the settings added alongside the rule
+    /// ignore list — these key names are what users write by hand, so a
+    /// rename is a breaking change and should fail loudly here.
+    #[test]
+    fn parses_rule_ignores_and_the_formerly_hardcoded_thresholds() {
+        let toml_str = r#"
+[rules]
+ignore = ["unmanaged_docker_containers", "uptime_ballast"]
+
+[thresholds]
+orbstack_cpu_percent = 150
+mutagen_cpu_percent = 5
+acp_agent_warn_count = 6
+"#;
+        let config = parse(toml_str, Path::new("test.toml")).unwrap();
+
+        assert_eq!(
+            config.rules.ignore,
+            vec![
+                "unmanaged_docker_containers".to_string(),
+                "uptime_ballast".to_string()
+            ]
+        );
+        assert_eq!(config.thresholds.orbstack_cpu_percent, 150.0);
+        assert_eq!(config.thresholds.mutagen_cpu_percent, 5.0);
+        assert_eq!(config.thresholds.acp_agent_warn_count, 6);
+        // Untouched thresholds must still fall back to their defaults.
+        assert_eq!(
+            config.thresholds.runaway_cpu_percent,
+            Thresholds::default().runaway_cpu_percent
+        );
     }
 
     #[test]
