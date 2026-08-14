@@ -16,6 +16,18 @@ struct DdevProjectsSection: View {
         "\(report.docker.containers.count) container(s) · \(report.ddev.running.count) DDEV project(s) running"
     }
 
+    /// OrbStack belongs here rather than in its own section: it *is* the
+    /// runtime those containers burn CPU through, and `container_load`
+    /// judges exactly this number while the UI never showed it.
+    @ViewBuilder
+    private var orbstackLine: some View {
+        if let label = ServiceSummary.orbstackLabel(report.processes.orbstack) {
+            Text("OrbStack · \(label)")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+        }
+    }
+
     private func cpuPercent(for project: String) -> Double {
         report.docker.containers
             .filter { $0.ddevProject == project }
@@ -40,6 +52,7 @@ struct DdevProjectsSection: View {
                 Text(summary)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                orbstackLine
             }
         } else {
             DisclosureGroup(isExpanded: $isExpanded) {
@@ -68,6 +81,7 @@ struct DdevProjectsSection: View {
                     Text(summary)
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                    orbstackLine
                 }
                 // DisclosureGroup's label is inert by default on macOS —
                 // only the triangle toggles it — so extend the tap
@@ -84,9 +98,6 @@ struct DdevProjectsSection: View {
                 .foregroundStyle(.secondary)
             Text("Docker & DDEV")
                 .font(.subheadline.weight(.semibold))
-        }
-    }
-}
             Spacer()
             // A menu rather than a second header button — bulk actions
             // are rare enough that a permanently visible button would
@@ -105,3 +116,6 @@ struct DdevProjectsSection: View {
                 .fixedSize()
                 .foregroundStyle(.secondary)
             }
+        }
+    }
+}

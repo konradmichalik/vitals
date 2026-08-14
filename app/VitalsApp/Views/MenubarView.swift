@@ -140,6 +140,13 @@ struct MenubarView: View {
                     Divider()
                     ClaudeSessionsSection(sessions: report.processes.claudeSessions)
                 }
+
+                Divider()
+
+                ServicesSection(
+                    timeMachine: report.timeMachine,
+                    agents: report.processes.acpAgents
+                )
             }
         }
     }
