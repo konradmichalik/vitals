@@ -20,7 +20,17 @@ struct SettingsView: View {
 
 struct GeneralTab: View {
     @State private var launchAtLogin = LaunchAtLogin.isEnabled
+    @State private var configError: String?
     @AppStorage(AppNotifier.alertStorageKey) private var notifyOnAlerts = true
+
+    private func openConfiguration() {
+        do {
+            NSWorkspace.shared.open(try ConfigTemplate.ensureExists())
+            configError = nil
+        } catch {
+            configError = "Couldn't create the config file: \(error.localizedDescription)"
+        }
+    }
 
     var body: some View {
         Form {
@@ -42,6 +52,22 @@ struct GeneralTab: View {
                         AppNotifier.requestPermission()
                     }
                 }
+
+            // Thresholds and the rule ignore list live in TOML that the
+            // Rust core reads. Mirroring each one as a native control
+            // would mean writing that file back out from Swift and
+            // destroying the user's own comments, so this opens it
+            // instead — seeding a fully commented template on first use.
+            LabeledContent("Rules & thresholds") {
+                VStack(alignment: .leading, spacing: 4) {
+                    Button("Edit ~/.vitals.toml…") { openConfiguration() }
+                    if let configError {
+                        Text(configError)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
+                }
+            }
         }
         .padding(20)
     }
