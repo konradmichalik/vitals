@@ -5,7 +5,7 @@ import SwiftUI
 /// performance cores) — an echo of that threshold for a quick glance, not
 /// a second source of truth. If `~/.vitals.toml` overrides those factors,
 /// the CLI's own findings remain authoritative; this is just a visual cue.
-enum LoadStatus: Equatable {
+enum LoadStatus: String, Equatable, Codable {
     case normal
     case warn
     case critical
