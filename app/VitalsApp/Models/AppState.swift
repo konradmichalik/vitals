@@ -66,9 +66,17 @@ final class AppState: ObservableObject {
     }
 
     nonisolated static func pollInterval(for report: VitalsReport?) -> TimeInterval {
-        guard let report, !report.findings.isEmpty else { return greenInterval }
+        guard let report, report.findings.contains(where: { $0.severity >= .warn }) else {
+            return greenInterval
+        }
         return alertInterval
     }
+    /// Keyed on severity, not on findings merely existing: info findings
+    /// are advisory and frequently permanent (accumulated ballast,
+    /// unmanaged containers), so counting them as "something is firing"
+    /// pinned the app to the 10s interval forever while the menu bar icon
+    /// sat green — polling a monitoring tool three times as often as
+    /// needed is exactly the load it exists to prevent.
 
     private func pollLoop() async {
         while !Task.isCancelled {

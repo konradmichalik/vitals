@@ -38,9 +38,33 @@ final class AppStateTests: XCTestCase {
         XCTAssertEqual(AppState.pollInterval(for: report), AppState.greenInterval)
     }
 
-    func testUsesAlertIntervalWhenAFindingFired() {
+    /// Info findings are advisory and often permanent (uptime ballast,
+    /// unmanaged containers) — treating their mere existence as an alert
+    /// pinned the app to the 10s interval indefinitely while the menu bar
+    /// icon stayed green.
+    func testUsesGreenIntervalWhenOnlyInfoFindingsFired() {
         let finding = Finding(rule: "uptime_ballast", severity: .info, message: "ballast", actions: [])
         let report = makeReport(findings: [finding])
+        XCTAssertEqual(AppState.pollInterval(for: report), AppState.greenInterval)
+    }
+
+    func testUsesAlertIntervalWhenAWarnFindingFired() {
+        let finding = Finding(rule: "memory_pressure", severity: .warn, message: "swap", actions: [])
+        let report = makeReport(findings: [finding])
+        XCTAssertEqual(AppState.pollInterval(for: report), AppState.alertInterval)
+    }
+
+    func testUsesAlertIntervalWhenACriticalFindingFired() {
+        let finding = Finding(rule: "load_status", severity: .critical, message: "load", actions: [])
+        let report = makeReport(findings: [finding])
+        XCTAssertEqual(AppState.pollInterval(for: report), AppState.alertInterval)
+    }
+
+    func testUsesAlertIntervalWhenInfoAndWarnFindingsMix() {
+        let report = makeReport(findings: [
+            Finding(rule: "uptime_ballast", severity: .info, message: "ballast", actions: []),
+            Finding(rule: "memory_pressure", severity: .warn, message: "swap", actions: []),
+        ])
         XCTAssertEqual(AppState.pollInterval(for: report), AppState.alertInterval)
     }
 }
