@@ -221,9 +221,8 @@ fn build_action(
         }
         "prune_docker_images" => Ok(Action::PruneDockerImages),
         other => Err(format!(
-            "unknown action `{other}` (expected one of: poweroff, stop_project, stop_backup, \
-             add_exclusions, kill_orphaned_agents, kill_runaway_processes, kill_session, \
-             prune_docker_images)"
+            "unknown action `{other}` (expected one of: {})",
+            vitals_core::actions::ACTION_NAMES.join(", ")
         )),
     }
 }

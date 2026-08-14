@@ -5,6 +5,20 @@
 use crate::error::VitalsError;
 use crate::probes::shell;
 
+/// Every name `vitals --fix <name>` accepts — the single source of truth
+/// shared by the CLI's parser error message and the rules' contract test,
+/// so a rule can never again advertise an action that doesn't exist.
+pub const ACTION_NAMES: &[&str] = &[
+    "poweroff",
+    "stop_project",
+    "stop_backup",
+    "add_exclusions",
+    "kill_orphaned_agents",
+    "kill_runaway_processes",
+    "kill_session",
+    "prune_docker_images",
+];
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Action {
     Poweroff,

@@ -81,6 +81,11 @@ a field without a default.
 
 `core/src/actions.rs` defines the `Action` enum from §9 and its `describe()` (pure,
 used for `--dry-run` and confirmation prompts) and `execute()` (shells out for real).
+`ACTION_NAMES` in the same module is the canonical list of names `--fix` accepts; it
+backs both the CLI's unknown-action error message and a `rules.rs` contract test
+asserting no rule can advertise an action that doesn't exist (two once did, so following
+the tool's own advice failed with "unknown action"). Add a name there when adding a
+variant.
 The CLI (`cli/src/main.rs`) owns confirmation and `--target` parsing; `core` never
 prompts or reads stdin. `vitals --fix <action> --yes` skips the interactive y/N prompt
 — used by the menubar app after its own native confirmation dialog.
