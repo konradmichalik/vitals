@@ -20,7 +20,7 @@ struct SettingsView: View {
 
 struct GeneralTab: View {
     @State private var launchAtLogin = LaunchAtLogin.isEnabled
-    @AppStorage(AppNotifier.criticalFindingStorageKey) private var notifyOnCritical = true
+    @AppStorage(AppNotifier.alertStorageKey) private var notifyOnAlerts = true
 
     var body: some View {
         Form {
@@ -36,8 +36,8 @@ struct GeneralTab: View {
                         launchAtLogin = LaunchAtLogin.isEnabled
                     }
                 }
-            Toggle("Notify when a finding becomes critical", isOn: $notifyOnCritical)
-                .onChange(of: notifyOnCritical) { _, newValue in
+            Toggle("Notify on new warnings and critical findings", isOn: $notifyOnAlerts)
+                .onChange(of: notifyOnAlerts) { _, newValue in
                     if newValue {
                         AppNotifier.requestPermission()
                     }

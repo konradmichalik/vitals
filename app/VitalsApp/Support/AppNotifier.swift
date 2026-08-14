@@ -12,10 +12,10 @@ enum AppNotifier {
     /// Single source of truth for the `@AppStorage` key shared by
     /// `AppDelegate`, `AppState`, and `SettingsView` — declaring it three
     /// times independently would let a typo in one silently desync it
-    /// from the others. Only gates critical-finding notifications; a
+    /// from the others. Only gates warn/critical finding notifications; a
     /// user-triggered action's own result always notifies regardless,
     /// since they explicitly asked for that action to run.
-    static let criticalFindingStorageKey = "notifyOnCritical"
+    static let alertStorageKey = "notifyOnAlerts"
 
     static func requestPermission() {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }

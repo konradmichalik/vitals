@@ -18,7 +18,7 @@ import UserNotifications
 /// part of the same image, so it's never subject to template masking.
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
-    @AppStorage(AppNotifier.criticalFindingStorageKey) private var notifyOnCritical = true
+    @AppStorage(AppNotifier.alertStorageKey) private var notifyOnAlerts = true
 
     let appState = AppState()
 
@@ -40,7 +40,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     func applicationDidFinishLaunching(_ notification: Foundation.Notification) {
         guard !isRunningTests else { return }
         UNUserNotificationCenter.current().delegate = self
-        if notifyOnCritical {
+        if notifyOnAlerts {
             AppNotifier.requestPermission()
         }
         setupStatusItem()

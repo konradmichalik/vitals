@@ -11,8 +11,8 @@ final class AppState: ObservableObject {
     @Published private(set) var lastUpdated: Date?
     @Published private(set) var history: [MetricSample] = []
 
-    @AppStorage(AppNotifier.criticalFindingStorageKey) private var notifyOnCritical = true
-    private var lastCriticalRules: Set<String> = []
+    @AppStorage(AppNotifier.alertStorageKey) private var notifyOnAlerts = true
+    private var lastAlertSeverities: [String: Severity] = [:]
     private var pollTask: Task<Void, Never>?
 
     nonisolated static let greenInterval: TimeInterval = 30
@@ -38,26 +38,30 @@ final class AppState: ObservableObject {
             self.report = report
             self.lastError = nil
             history = MetricHistory.appending(.from(report: report), to: history)
-            notifyAboutNewCriticalFindings(in: report.findings)
+            notifyAboutNewAlertingFindings(in: report.findings)
         case .failure(let error):
             self.lastError = error
         }
         lastUpdated = Date()
     }
 
-    /// `lastCriticalRules` is updated unconditionally, even with
+    /// `lastAlertSeverities` is updated unconditionally, even with
     /// notifications turned off — otherwise turning them on later would
-    /// treat every already-critical finding as newly critical and fire a
+    /// treat every already-alerting finding as new and fire a
     /// notification storm for state that isn't actually new.
-    private func notifyAboutNewCriticalFindings(in findings: [Finding]) {
-        let currentCritical = CriticalFindingTransition.criticalRuleNames(in: findings)
-        let newlyCritical = CriticalFindingTransition.newlyCritical(previous: lastCriticalRules, current: currentCritical)
-        lastCriticalRules = currentCritical
+    private func notifyAboutNewAlertingFindings(in findings: [Finding]) {
+        let current = FindingAlertTransition.alertingSeverities(in: findings)
+        let newlyAlerting = FindingAlertTransition.newlyAlerting(
+            previous: lastAlertSeverities,
+            current: current
+        )
+        lastAlertSeverities = current
 
-        guard notifyOnCritical else { return }
-        for rule in newlyCritical {
+        guard notifyOnAlerts else { return }
+        for rule in newlyAlerting {
             guard let finding = findings.first(where: { $0.rule == rule }) else { continue }
-            AppNotifier.notify(id: rule, title: "Vitals — critical", body: finding.message)
+            let title = finding.severity == .critical ? "Vitals — critical" : "Vitals — warning"
+            AppNotifier.notify(id: rule, title: title, body: finding.message)
         }
     }
 

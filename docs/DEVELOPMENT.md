@@ -122,14 +122,18 @@ Rust side — write the test against a stubbed body, confirm it fails for the ri
 reason, then implement. `xcodebuild -project VitalsApp.xcodeproj -scheme VitalsApp test`
 (or `make test`) runs the suite; a plain build does not.
 
-`Support/CriticalFindingTransition.swift` tracks which rule names are critical between
-polls (`newlyCritical(previous:current:)`, both `Set<String>` — pure, tested); `AppState`
-notifies only on the transition *into* critical, never while it persists across the 10s
-alert-interval poll, and always updates its tracked set even with notifications turned
-off (otherwise re-enabling them later would treat every already-critical finding as new).
-`Support/CriticalFindingNotifier.swift` is the untested `UNUserNotificationCenter`
-pass-through (real side effects, same rationale as `LaunchAtLogin`); `Support/AppDelegate.swift`
-owns the permission request and delegate registration.
+`Support/FindingAlertTransition.swift` tracks a *severity per rule* between polls
+(`alertingSeverities(in:)` → `[String: Severity]`, `newlyAlerting(previous:current:)` —
+pure, tested); `AppState` notifies on the transition into warn *or* critical, never while
+one persists across the 10s alert-interval poll, and always updates its tracked map even
+with notifications turned off (otherwise re-enabling them later would treat every
+already-alerting finding as new). Severity is tracked rather than plain set membership
+because a rule escalating warn → critical is already in the previous set, so a
+membership-only diff would silently swallow the louder second notification. Info stays
+silent by design. `Support/AppNotifier.swift` is the untested `UNUserNotificationCenter`
+pass-through (real side effects, same rationale as `LaunchAtLogin`) and owns the
+`alertStorageKey` `@AppStorage` key; `Support/AppDelegate.swift` owns the permission
+request and delegate registration.
 
 ### Code signing without an Apple Developer account
 
