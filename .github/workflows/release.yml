@@ -1,0 +1,148 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-cli:
+    strategy:
+      matrix:
+        include:
+          - arch: arm64
+            target: aarch64-apple-darwin
+          - arch: x86_64
+            target: x86_64-apple-darwin
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+      - name: Build
+        run: cargo build --release --target ${{ matrix.target }} -p vitals
+      - name: Package
+        run: |
+          ARCHIVE="vitals-${{ matrix.arch }}-apple-darwin.tar.gz"
+          tar -czf "$ARCHIVE" -C target/${{ matrix.target }}/release vitals
+          echo "ARCHIVE=$ARCHIVE" >> $GITHUB_ENV
+      - name: Upload archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: cli-${{ matrix.arch }}
+          path: "*.tar.gz"
+
+  build-app:
+    strategy:
+      matrix:
+        include:
+          - arch: arm64
+            target: aarch64-apple-darwin
+          - arch: x86_64
+            target: x86_64-apple-darwin
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate Xcode project
+        run: cd app && xcodegen generate
+      - name: Build
+        run: |
+          cd app
+          xcodebuild \
+            -project VitalsApp.xcodeproj \
+            -scheme VitalsApp \
+            -configuration Release \
+            -derivedDataPath build \
+            -arch ${{ matrix.arch }} \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_REQUIRED=NO \
+            build
+      - name: Create DMG
+        run: |
+          cd app
+          APP_PATH="build/Build/Products/Release/VitalsApp.app"
+          DMG_NAME="VitalsApp-${{ matrix.target }}.dmg"
+          mkdir -p dmg-staging
+          cp -R "$APP_PATH" dmg-staging/
+          ln -s /Applications dmg-staging/Applications
+          hdiutil create -volname "VitalsApp" -srcfolder dmg-staging -ov -format UDZO "$DMG_NAME"
+      - name: Upload DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-${{ matrix.arch }}
+          path: "app/*.dmg"
+
+  release:
+    needs: [build-cli, build-app]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+      - name: Generate checksums
+        run: |
+          cd cli-arm64 && shasum -a 256 *.tar.gz > ../checksums.txt && cd ..
+          cd cli-x86_64 && shasum -a 256 *.tar.gz >> ../checksums.txt && cd ..
+          cd app-arm64 && shasum -a 256 *.dmg >> ../checksums.txt && cd ..
+          cd app-x86_64 && shasum -a 256 *.dmg >> ../checksums.txt && cd ..
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            cli-arm64/*.tar.gz
+            cli-x86_64/*.tar.gz
+            app-arm64/*.dmg
+            app-x86_64/*.dmg
+            checksums.txt
+      - name: Extract version
+        id: version
+        run: |
+          TAG="${{ github.ref_name }}"
+          VERSION="${TAG#v}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+      - name: Extract checksums
+        id: checksums
+        run: |
+          CLI_ARM64_SHA=$(grep "vitals-arm64-apple-darwin.tar.gz" checksums.txt | awk '{print $1}')
+          CLI_X86_SHA=$(grep "vitals-x86_64-apple-darwin.tar.gz" checksums.txt | awk '{print $1}')
+          APP_ARM64_SHA=$(grep "VitalsApp-aarch64-apple-darwin.dmg" checksums.txt | awk '{print $1}')
+          APP_X86_SHA=$(grep "VitalsApp-x86_64-apple-darwin.dmg" checksums.txt | awk '{print $1}')
+          echo "cli_arm64_sha=$CLI_ARM64_SHA" >> $GITHUB_OUTPUT
+          echo "cli_x86_sha=$CLI_X86_SHA" >> $GITHUB_OUTPUT
+          echo "app_arm64_sha=$APP_ARM64_SHA" >> $GITHUB_OUTPUT
+          echo "app_x86_sha=$APP_X86_SHA" >> $GITHUB_OUTPUT
+      - name: Update Homebrew Formula
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          repository: konradmichalik/homebrew-tap
+          event-type: update-formula
+          client-payload: |
+            {
+              "formula": "vitals",
+              "version": "${{ steps.version.outputs.version }}",
+              "sha_arm": "${{ steps.checksums.outputs.cli_arm64_sha }}",
+              "sha_intel": "${{ steps.checksums.outputs.cli_x86_sha }}"
+            }
+      - name: Update Homebrew Cask
+        uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          repository: konradmichalik/homebrew-tap
+          event-type: update-cask
+          client-payload: |
+            {
+              "app": "vitals-app",
+              "version": "${{ steps.version.outputs.version }}",
+              "tag": "${{ steps.version.outputs.tag }}",
+              "sha_arm": "${{ steps.checksums.outputs.app_arm64_sha }}",
+              "sha_intel": "${{ steps.checksums.outputs.app_x86_sha }}"
+            }
