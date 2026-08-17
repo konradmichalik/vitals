@@ -32,13 +32,27 @@
 
 ## 🔥 Installation
 
-Not yet published or installable via Homebrew — build from source.
+### Homebrew
+
+**CLI** — <a href="https://github.com/konradmichalik/homebrew-tap"><img src="https://img.shields.io/endpoint?url=https%3A%2F%2Fkonradmichalik.github.io%2Fhomebrew-tap%2Fbadges%2Fvitals-version.json&style=flat-square&logo=homebrew" alt="Homebrew version"></a> <a href="https://github.com/konradmichalik/homebrew-tap"><img src="https://img.shields.io/endpoint?url=https%3A%2F%2Fkonradmichalik.github.io%2Fhomebrew-tap%2Fbadges%2Fvitals-downloads.json&style=flat-square&logo=homebrew" alt="Homebrew downloads"></a>
+
+```sh
+brew install konradmichalik/tap/vitals
+```
+
+**Menubar app** — <a href="https://github.com/konradmichalik/homebrew-tap"><img src="https://img.shields.io/endpoint?url=https%3A%2F%2Fkonradmichalik.github.io%2Fhomebrew-tap%2Fbadges%2Fvitals-app-version.json&style=flat-square&logo=homebrew" alt="Homebrew version"></a> <a href="https://github.com/konradmichalik/homebrew-tap"><img src="https://img.shields.io/endpoint?url=https%3A%2F%2Fkonradmichalik.github.io%2Fhomebrew-tap%2Fbadges%2Fvitals-app-downloads.json&style=flat-square&logo=homebrew" alt="Homebrew downloads"></a>
+
+```sh
+brew install --cask konradmichalik/tap/vitals-app
+```
 
 ### Requirements
 
 - macOS 14+
 - Rust toolchain (`cargo`)
 - Xcode + [XcodeGen](https://github.com/yonaskolb/XcodeGen) — only for the menubar app (below)
+
+> Want to build from source instead? See below.
 
 ### Build from source
 
