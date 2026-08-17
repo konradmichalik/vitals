@@ -50,7 +50,14 @@ targets:
         script: |
           export PATH="$HOME/.cargo/bin:$PATH"
           cd "$PROJECT_DIR/.."
-          cargo build --release -p vitals-ffi 2>&1
+          # CI cross-arch builds pre-build vitals-ffi for the exact target
+          # triple themselves (a plain host-arch `cargo build` here would
+          # clobber that with the wrong architecture's library).
+          if [ "$SKIP_CARGO_PREBUILD" = "1" ]; then
+            echo "Skipping cargo build (SKIP_CARGO_PREBUILD=1) — library and header already provided"
+          else
+            cargo build --release -p vitals-ffi 2>&1
+          fi
         basedOnDependencyAnalysis: false
 
   VitalsAppTests:

@@ -48,11 +48,22 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+      - name: Build vitals-ffi for target arch
+        run: |
+          cargo build --release --target ${{ matrix.target }} -p vitals-ffi
+          mkdir -p target/release
+          cp -f target/${{ matrix.target }}/release/libvitals_ffi.a target/release/libvitals_ffi.a
       - name: Install XcodeGen
         run: brew install xcodegen
       - name: Generate Xcode project
         run: cd app && xcodegen generate
       - name: Build
+        env:
+          SKIP_CARGO_PREBUILD: "1"
         run: |
           cd app
           xcodebuild \
