@@ -970,7 +970,12 @@ mod tests {
         let busy = process("mutagen-agent", 15.0);
         let mut config = Config::default();
 
-        assert!(!finds(&report, &[busy.clone()], &config, "mutagen_active"));
+        assert!(!finds(
+            &report,
+            std::slice::from_ref(&busy),
+            &config,
+            "mutagen_active"
+        ));
 
         config.thresholds.mutagen_cpu_percent = 10.0;
         assert!(finds(&report, &[busy], &config, "mutagen_active"));
