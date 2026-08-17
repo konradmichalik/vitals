@@ -8,9 +8,18 @@ ffi:
 # Generate C header (happens automatically during cargo build via build.rs)
 header: ffi
 
-# Generate Xcode project from project.yml
+# Generate Xcode project from project.yml, then refresh the pointer
+# sourcekit-lsp uses to find it. Without a current buildServer.json the
+# editor cannot read the .xcodeproj at all: it parses each file in
+# isolation and reports every project-owned symbol as "cannot find X in
+# scope" while framework symbols still resolve. Regenerating the project
+# without regenerating this leaves it stale, so the two belong together.
+# Skipped with a note where the tool isn't installed (CI never needs it).
 xcode: header
 	xcodegen generate
+	@command -v xcode-build-server >/dev/null 2>&1 \
+		&& xcode-build-server config -project VitalsApp.xcodeproj -scheme VitalsApp >/dev/null \
+		|| echo "note: xcode-build-server not installed, skipping buildServer.json (editor indexing only)"
 
 # Build the macOS app via xcodebuild
 build: xcode
