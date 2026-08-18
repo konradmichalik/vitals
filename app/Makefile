@@ -21,9 +21,12 @@ xcode: header
 		&& xcode-build-server config -project VitalsApp.xcodeproj -scheme VitalsApp >/dev/null \
 		|| echo "note: xcode-build-server not installed, skipping buildServer.json (editor indexing only)"
 
-# Build the macOS app via xcodebuild
+# Build the macOS app via xcodebuild. ONLY_ACTIVE_ARCH restricts this to
+# the host's architecture — vitals-ffi is only cargo-built for the host
+# triple here, unlike CI's release workflow, which cross-compiles it per
+# arch and passes -arch explicitly to xcodebuild.
 build: xcode
-	xcodebuild -project VitalsApp.xcodeproj -scheme VitalsApp -configuration Release build
+	xcodebuild -project VitalsApp.xcodeproj -scheme VitalsApp -configuration Release ONLY_ACTIVE_ARCH=YES build
 
 # Run the Swift test suite
 test: xcode
