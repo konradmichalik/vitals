@@ -10,8 +10,6 @@
     <string>APPL</string>
     <key>CFBundleName</key>
     <string>$(PRODUCT_NAME)</string>
-    <key>LSUIElement</key>
-    <true/>
     <key>CFBundleDisplayName</key>
     <string>Vitals</string>
     <key>CFBundleShortVersionString</key>

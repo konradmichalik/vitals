@@ -37,6 +37,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
     }
 
+    /// `LSUIElement` in Info.plist would keep the app out of the Dock
+    /// from the very first instant, but Notification Center's icon
+    /// lookup for a sender never resolves for apps that never once
+    /// registered as Dock-eligible — banners rendered a blank placeholder
+    /// where the app icon belongs, even though the icon itself is set up
+    /// correctly (Finder, Launch Services, `CFBundleIconName` all resolve
+    /// it fine). Switching the activation policy here instead, as early
+    /// as possible, gives Launch Services that one legitimate pass while
+    /// still hiding the Dock icon before the app is visibly usable.
+    func applicationWillFinishLaunching(_ notification: Foundation.Notification) {
+        guard !isRunningTests else { return }
+        NSApp.setActivationPolicy(.accessory)
+    }
+
     func applicationDidFinishLaunching(_ notification: Foundation.Notification) {
         guard !isRunningTests else { return }
         UNUserNotificationCenter.current().delegate = self
