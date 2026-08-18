@@ -86,8 +86,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         }
     }
 
+    /// The dot only earns its keep as an interrupt for something worth
+    /// noticing — showing it green for the common "all clear" case just
+    /// added a permanent fixture next to the icon with nothing to say.
     private func updateBadge(for findings: [Finding]) {
-        badgeView?.layer?.backgroundColor = NSColor(TrafficLight.from(findings: findings).color).cgColor
+        let light = TrafficLight.from(findings: findings)
+        badgeView?.isHidden = light == .green
+        badgeView?.layer?.backgroundColor = NSColor(light.color).cgColor
         statusItem?.button?.toolTip = TrafficLight.tooltip(for: findings)
     }
 
