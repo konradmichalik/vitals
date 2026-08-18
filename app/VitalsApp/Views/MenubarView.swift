@@ -19,6 +19,11 @@ struct MenubarView: View {
             footer
         }
         .frame(width: 380)
+        // NSPopover has no opaque backing of its own — without this the
+        // system's vibrancy blur shows whatever's on the desktop behind
+        // the popover straight through the card tints below, mixing in
+        // unpredictable colors depending on what's underneath.
+        .background(Color(nsColor: .windowBackgroundColor))
         .alert(item: $pendingAction) { pending in
             let command = pending.target.map { "\(pending.action) --target \($0)" } ?? pending.action
             return Alert(
