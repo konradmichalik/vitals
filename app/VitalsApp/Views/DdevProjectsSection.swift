@@ -94,10 +94,7 @@ struct DdevProjectsSection: View {
 
     private var header: some View {
         HStack(spacing: 6) {
-            Image(systemName: "shippingbox")
-                .foregroundStyle(.secondary)
-            Text("Docker & DDEV")
-                .font(.subheadline.weight(.semibold))
+            SectionHeader(icon: "shippingbox", title: "Docker & DDEV")
             Spacer()
             // A menu rather than a second header button — bulk actions
             // are rare enough that a permanently visible button would

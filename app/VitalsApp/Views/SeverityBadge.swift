@@ -4,13 +4,7 @@ struct SeverityBadge: View {
     let severity: Severity
 
     var body: some View {
-        Text(severity.rawValue)
-            .font(.caption2.weight(.bold))
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(color.opacity(0.2))
-            .foregroundStyle(color)
-            .clipShape(Capsule())
+        StatusPill(text: severity.rawValue, color: color)
     }
 
     private var color: Color {

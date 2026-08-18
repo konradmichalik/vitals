@@ -35,7 +35,7 @@ struct TopProcessesSection: View {
                                 .buttonStyle(.bordered)
                                 .controlSize(.small)
                         }
-                        .padding(.vertical, 3)
+                        .padding(.vertical, 4)
                     }
                 }
             } label: {
@@ -55,11 +55,6 @@ struct TopProcessesSection: View {
     }
 
     private var header: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "list.number")
-                .foregroundStyle(.secondary)
-            Text("Top processes")
-                .font(.subheadline.weight(.semibold))
-        }
+        SectionHeader(icon: "list.number", title: "Top processes")
     }
 }

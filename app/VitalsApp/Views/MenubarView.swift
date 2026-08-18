@@ -65,13 +65,7 @@ struct MenubarView: View {
     /// the sections below.
     private func statusPill(_ findings: [Finding]) -> some View {
         let light = TrafficLight.from(findings: findings)
-        return Text(TrafficLight.statusLabel(for: findings))
-            .font(.caption2.weight(.bold))
-            .padding(.horizontal, 8)
-            .padding(.vertical, 3)
-            .background(light.color.opacity(0.15))
-            .foregroundStyle(light.color)
-            .clipShape(Capsule())
+        return StatusPill(text: TrafficLight.statusLabel(for: findings), color: light.color)
     }
 
     @ViewBuilder
@@ -105,15 +99,6 @@ struct MenubarView: View {
             findingsSection(report)
         }
         .padding(12)
-    }
-
-    private func sectionHeader(_ icon: String, _ title: String) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: icon)
-                .foregroundStyle(.secondary)
-            Text(title)
-                .font(.subheadline.weight(.semibold))
-        }
     }
 
     /// Two bordered "cards" rather than one: the load card's tint reflects
@@ -178,7 +163,7 @@ struct MenubarView: View {
 
         return VStack(alignment: .leading, spacing: 4) {
             HStack {
-                sectionHeader("gauge.medium", "Load average")
+                SectionHeader(icon: "gauge.medium", title: "Load average")
                 Spacer()
                 Text(status.label)
                     .font(.caption.weight(.semibold))
@@ -215,7 +200,7 @@ struct MenubarView: View {
         let memColor = memoryColor(report.system.memory.pressureLevel)
 
         return VStack(alignment: .leading, spacing: 6) {
-            sectionHeader("cpu", "CPU & Memory")
+            SectionHeader(icon: "cpu", title: "CPU & Memory")
             HStack {
                 Text("\(cpuUsedPercent)% CPU")
                     .font(.caption)
@@ -294,7 +279,7 @@ struct MenubarView: View {
             .foregroundStyle(.secondary)
         } else {
             VStack(alignment: .leading, spacing: 6) {
-                sectionHeader("exclamationmark.triangle", "Findings")
+                SectionHeader(icon: "exclamationmark.triangle", title: "Findings")
                 // A Divider between rows (not around the whole group) so
                 // the list reads as one connected block instead of
                 // findings running into each other with only padding

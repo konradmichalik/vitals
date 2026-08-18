@@ -46,7 +46,7 @@ struct ClaudeSessionsSection: View {
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
-                        .padding(.vertical, 3)
+                        .padding(.vertical, 4)
                     }
                 }
             } label: {
@@ -66,12 +66,7 @@ struct ClaudeSessionsSection: View {
     }
 
     private var header: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "terminal")
-                .foregroundStyle(.secondary)
-            Text("Claude Code")
-                .font(.subheadline.weight(.semibold))
-        }
+        SectionHeader(icon: "terminal", title: "Claude Code")
     }
 
     private static let durationFormatter: DateComponentsFormatter = {

@@ -31,12 +31,7 @@ struct ServicesSection: View {
     }
 
     private var header: some View {
-        HStack(spacing: 6) {
-            Image(systemName: "gearshape.2")
-                .foregroundStyle(.secondary)
-            Text("System services")
-                .font(.subheadline.weight(.semibold))
-        }
+        SectionHeader(icon: "gearshape.2", title: "System services")
     }
 
     private func row(_ name: String, _ value: String, color: Color) -> some View {

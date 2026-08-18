@@ -28,6 +28,7 @@
 		9A26222C27D491DEBE3ED44C /* SeverityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD3595400A49D7BED6DA09D8 /* SeverityTests.swift */; };
 		9BE274493ABB7620182ED909 /* TopProcessesSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2BEB938924F558549E0A1143 /* TopProcessesSection.swift */; };
 		A8B75056BB33A490AF247281 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCB2D98E1F46D81928FDBFEC /* AppDelegate.swift */; };
+		AA4B613AE802D9818156CB2F /* SectionHeader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98E2637CD2BA3F5589C78DEF /* SectionHeader.swift */; };
 		AB32AD88721AB790610BE73A /* VitalsBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 566229B483107F02FF8B4096 /* VitalsBridge.swift */; };
 		AB69DB2ABD914FECA8A6EF6B /* FindingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5D365FA57A709BC4D3E6D59 /* FindingTests.swift */; };
 		AF37E4EFF4B806CAF20CF3E1 /* ClaudeSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBBD424F8327E49B71510E78 /* ClaudeSessionTests.swift */; };
@@ -45,6 +46,7 @@
 		DCFC3D3AFFC7198ED70FA1F4 /* TrafficLightTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29004B98A4F3CE2DFFF39055 /* TrafficLightTests.swift */; };
 		DF0F98DBA5F0017132E42371 /* AppState.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6CF9C0ADDB9F00B30E3C83D7 /* AppState.swift */; };
 		DF18C9F7ACF656B8CA88F6A4 /* ConfigTemplate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5D95B3564FAF8D86EE696640 /* ConfigTemplate.swift */; };
+		F8EEB287B6D62DED266E40B3 /* StatusPill.swift in Sources */ = {isa = PBXBuildFile; fileRef = F4270D3B88DDBD55D067F460 /* StatusPill.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -84,6 +86,7 @@
 		8D515F029BA0CDFA363A49B0 /* AppNotifier.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppNotifier.swift; sourceTree = "<group>"; };
 		90B864952B8B1DD13CCB985A /* SeverityBadge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeverityBadge.swift; sourceTree = "<group>"; };
 		98643A10C0C6FB6A442D808C /* VitalsAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VitalsAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		98E2637CD2BA3F5589C78DEF /* SectionHeader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SectionHeader.swift; sourceTree = "<group>"; };
 		A972740A8FC992B5AAA8F2A3 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		AAD560573ED4211A14D76800 /* LaunchAtLogin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LaunchAtLogin.swift; sourceTree = "<group>"; };
 		AD3595400A49D7BED6DA09D8 /* SeverityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeverityTests.swift; sourceTree = "<group>"; };
@@ -98,6 +101,7 @@
 		E7F99AD603534B4B72EA66EC /* DdevProjectsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DdevProjectsSection.swift; sourceTree = "<group>"; };
 		E8AAEA7399780C2F77947EF3 /* FindingRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FindingRow.swift; sourceTree = "<group>"; };
 		EBBD424F8327E49B71510E78 /* ClaudeSessionTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeSessionTests.swift; sourceTree = "<group>"; };
+		F4270D3B88DDBD55D067F460 /* StatusPill.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusPill.swift; sourceTree = "<group>"; };
 		FC5BE18C3CF3F147BF68642D /* TrafficLight.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrafficLight.swift; sourceTree = "<group>"; };
 		FC860273E68D60F0588E221A /* ServiceSummaryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceSummaryTests.swift; sourceTree = "<group>"; };
 		FCB2D98E1F46D81928FDBFEC /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
@@ -167,10 +171,12 @@
 				E7F99AD603534B4B72EA66EC /* DdevProjectsSection.swift */,
 				E8AAEA7399780C2F77947EF3 /* FindingRow.swift */,
 				3E823D3AF77CF0929A8096C7 /* MenubarView.swift */,
+				98E2637CD2BA3F5589C78DEF /* SectionHeader.swift */,
 				19D4BBF6B0D410E59A7D86BF /* ServicesSection.swift */,
 				A972740A8FC992B5AAA8F2A3 /* SettingsView.swift */,
 				90B864952B8B1DD13CCB985A /* SeverityBadge.swift */,
 				4D474966020CBE2D6BBB704C /* Sparkline.swift */,
+				F4270D3B88DDBD55D067F460 /* StatusPill.swift */,
 				2BEB938924F558549E0A1143 /* TopProcessesSection.swift */,
 			);
 			path = Views;
@@ -313,7 +319,7 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "export PATH=\"$HOME/.cargo/bin:$PATH\"\ncd \"$PROJECT_DIR/..\"\ncargo build --release -p vitals-ffi 2>&1\n";
+			shellScript = "export PATH=\"$HOME/.cargo/bin:$PATH\"\ncd \"$PROJECT_DIR/..\"\n# CI cross-arch builds pre-build vitals-ffi for the exact target\n# triple themselves (a plain host-arch `cargo build` here would\n# clobber that with the wrong architecture's library).\nif [ \"$SKIP_CARGO_PREBUILD\" = \"1\" ]; then\n  echo \"Skipping cargo build (SKIP_CARGO_PREBUILD=1) — library and header already provided\"\nelse\n  cargo build --release -p vitals-ffi 2>&1\nfi\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -336,11 +342,13 @@
 				5F62DD754678080D18864B3E /* MenubarView.swift in Sources */,
 				C2586DFD0C0585FFA9ACF8D7 /* MetricHistoryStore.swift in Sources */,
 				5BCAF372E8B77FCAD5150F36 /* MetricSample.swift in Sources */,
+				AA4B613AE802D9818156CB2F /* SectionHeader.swift in Sources */,
 				4E142FED7575FD89CC737137 /* ServiceSummary.swift in Sources */,
 				716D15D31B1562EA5C74955F /* ServicesSection.swift in Sources */,
 				B0E613EAA7BF5A5773AA7BFA /* SettingsView.swift in Sources */,
 				AFEB5BA7566E8294F02A0C6A /* SeverityBadge.swift in Sources */,
 				455B7B913BA5946FCBAF9D42 /* Sparkline.swift in Sources */,
+				F8EEB287B6D62DED266E40B3 /* StatusPill.swift in Sources */,
 				9BE274493ABB7620182ED909 /* TopProcessesSection.swift in Sources */,
 				1BBF35268C2297D03C00849F /* TrafficLight.swift in Sources */,
 				D19D72DAE9BB4FA1B850190D /* VitalsApp.swift in Sources */,
@@ -399,7 +407,7 @@
 					"@executable_path/../Frameworks",
 				);
 				LIBRARY_SEARCH_PATHS = "$(PROJECT_DIR)/../target/release";
-				MARKETING_VERSION = 0.4.0;
+				MARKETING_VERSION = 0.1.0;
 				OTHER_LDFLAGS = "-lvitals_ffi";
 				PRODUCT_BUNDLE_IDENTIFIER = com.konradmichalik.vitals;
 				PRODUCT_NAME = VitalsApp;
@@ -428,7 +436,7 @@
 					"@executable_path/../Frameworks",
 				);
 				LIBRARY_SEARCH_PATHS = "$(PROJECT_DIR)/../target/release";
-				MARKETING_VERSION = 0.4.0;
+				MARKETING_VERSION = 0.1.0;
 				OTHER_LDFLAGS = "-lvitals_ffi";
 				PRODUCT_BUNDLE_IDENTIFIER = com.konradmichalik.vitals;
 				PRODUCT_NAME = VitalsApp;
