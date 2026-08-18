@@ -335,18 +335,21 @@ struct MenubarView: View {
         Task.detached(priority: .userInitiated) {
             let result = ActionRunner.run(action: action, target: target)
             let message: String
+            let kind: AppNotifier.Kind
             switch result {
             case .success(let output):
                 message = output.isEmpty ? "Done: \(action)" : output
+                kind = .success
             case .failure(let error):
                 message = error.message
+                kind = .failure
             }
             // A system notification rather than inline text in the
             // dropdown — actions run detached and the dropdown is very
             // likely closed by the time a `stop_project`/similar action
             // actually finishes, so an inline result alone would go
             // unseen.
-            AppNotifier.notify(id: "action-\(action)", title: "Vitals", body: message)
+            await AppNotifier.notify(id: "action-\(action)", title: "Vitals", body: message, kind: kind)
             await appState.refresh()
         }
     }

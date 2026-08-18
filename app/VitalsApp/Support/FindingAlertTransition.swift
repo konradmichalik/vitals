@@ -35,4 +35,20 @@ enum FindingAlertTransition {
                 .keys
         )
     }
+
+    /// Guards against a rule flapping right at its threshold (memory
+    /// pressure hovering at the edge of "warn") re-firing a notification
+    /// every time it crosses back over. `newlyAlerting` alone can't catch
+    /// this: dropping below `.warn` removes the rule from `current`
+    /// entirely, so its next crossing looks like a brand new alert rather
+    /// than a repeat of one just seen moments ago.
+    static func shouldNotify(
+        rule: String,
+        now: Date,
+        lastNotifiedAt: [String: Date],
+        cooldown: TimeInterval
+    ) -> Bool {
+        guard let last = lastNotifiedAt[rule] else { return true }
+        return now.timeIntervalSince(last) >= cooldown
+    }
 }

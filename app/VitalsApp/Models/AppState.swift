@@ -13,10 +13,15 @@ final class AppState: ObservableObject {
 
     @AppStorage(AppNotifier.alertStorageKey) private var notifyOnAlerts = true
     private var lastAlertSeverities: [String: Severity] = [:]
+    private var lastNotifiedAt: [String: Date] = [:]
     private var pollTask: Task<Void, Never>?
 
     nonisolated static let greenInterval: TimeInterval = 30
     nonisolated static let alertInterval: TimeInterval = 10
+    /// How long a rule must stay quiet before it's allowed to notify
+    /// again — separate from the poll interval, since a finding
+    /// hovering right at its threshold can cross in and out every poll.
+    nonisolated static let notificationCooldown: TimeInterval = 15 * 60
 
     private let historyStore = MetricHistoryStore()
 
@@ -62,10 +67,17 @@ final class AppState: ObservableObject {
         lastAlertSeverities = current
 
         guard notifyOnAlerts else { return }
+        let now = Date()
         for rule in newlyAlerting {
             guard let finding = findings.first(where: { $0.rule == rule }) else { continue }
-            let title = finding.severity == .critical ? "Vitals — critical" : "Vitals — warning"
-            AppNotifier.notify(id: rule, title: title, body: finding.message)
+            guard FindingAlertTransition.shouldNotify(
+                rule: rule, now: now, lastNotifiedAt: lastNotifiedAt, cooldown: Self.notificationCooldown
+            ) else { continue }
+            lastNotifiedAt[rule] = now
+
+            let isCritical = finding.severity == .critical
+            let title = isCritical ? "Vitals — critical" : "Vitals — warning"
+            AppNotifier.notify(id: rule, title: title, body: finding.message, kind: isCritical ? .critical : .warning)
         }
     }
 

@@ -73,4 +73,31 @@ final class FindingAlertTransitionTests: XCTestCase {
         )
         XCTAssertEqual(result, ["memory_pressure"])
     }
+
+    func testShouldNotifyWhenRuleWasNeverNotifiedBefore() {
+        let now = Date()
+        XCTAssertTrue(
+            FindingAlertTransition.shouldNotify(rule: "memory_pressure", now: now, lastNotifiedAt: [:], cooldown: 900)
+        )
+    }
+
+    func testShouldNotNotifyWithinTheCooldownWindow() {
+        let now = Date()
+        let lastNotifiedAt = ["memory_pressure": now.addingTimeInterval(-60)]
+        XCTAssertFalse(
+            FindingAlertTransition.shouldNotify(
+                rule: "memory_pressure", now: now, lastNotifiedAt: lastNotifiedAt, cooldown: 900
+            )
+        )
+    }
+
+    func testShouldNotifyOnceTheCooldownWindowHasElapsed() {
+        let now = Date()
+        let lastNotifiedAt = ["memory_pressure": now.addingTimeInterval(-901)]
+        XCTAssertTrue(
+            FindingAlertTransition.shouldNotify(
+                rule: "memory_pressure", now: now, lastNotifiedAt: lastNotifiedAt, cooldown: 900
+            )
+        )
+    }
 }
