@@ -13,7 +13,9 @@ struct DdevProjectsSection: View {
     @State private var isExpanded = false
 
     private var summary: String {
-        "\(report.docker.containers.count) container(s) · \(report.ddev.running.count) DDEV project(s) running"
+        let totalCpu = report.docker.containers.reduce(0.0) { $0 + $1.cpuPercent }
+        return "\(report.docker.containers.count) container(s) · \(report.ddev.running.count) DDEV project(s)"
+            + " running · \(Int(totalCpu.rounded()))% CPU"
     }
 
     /// OrbStack belongs here rather than in its own section: it *is* the

@@ -13,7 +13,8 @@ struct ClaudeSessionsSection: View {
     @State private var isExpanded = false
 
     private var summary: String {
-        "\(sessions.count) Claude Code session(s) running"
+        let totalCpu = sessions.reduce(0.0) { $0 + $1.cpuPercent }
+        return "\(sessions.count) Claude Code session(s) running · \(Int(totalCpu.rounded()))% CPU"
     }
 
     var body: some View {
