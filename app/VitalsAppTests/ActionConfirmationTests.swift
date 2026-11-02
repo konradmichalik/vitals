@@ -71,7 +71,7 @@ final class ActionConfirmationTests: XCTestCase {
 
     func testButtonLabelsMatchTheConfirmationVerb() {
         let expected = [
-            "poweroff": "Power off", "stop_project": "Stop", "start_project": "Start",
+            "poweroff": "Power off DDEV", "stop_project": "Stop", "start_project": "Start",
             "stop_backup": "Stop backup", "add_exclusions": "Exclude", "kill_orphaned_agents": "Quit agents",
             "kill_runaway_processes": "Quit processes", "kill_process": "Quit", "prune_docker_images": "Prune images",
         ]

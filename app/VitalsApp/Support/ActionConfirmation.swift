@@ -41,7 +41,7 @@ struct ActionConfirmation: Equatable {
             title: "Quit runaway processes?", reversal: "Not reversible", isDestructive: true, buttonLabel: "Quit processes"
         ),
         "poweroff": Copy(
-            title: "Power off all DDEV projects?", reversal: "Start projects again one by one", isDestructive: true, buttonLabel: "Power off"
+            title: "Power off all DDEV projects?", reversal: "Start projects again one by one", isDestructive: true, buttonLabel: "Power off DDEV"
         ),
         "prune_docker_images": Copy(
             title: "Remove dangling images?", reversal: "Rebuild from Dockerfile if needed", isDestructive: true, buttonLabel: "Prune images"
