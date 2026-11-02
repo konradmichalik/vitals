@@ -52,6 +52,45 @@ pub fn acp_agents(processes: &[ProcessEntry], retired_versions: &[String]) -> Ve
         .collect()
 }
 
+const INTERPRETERS: [&str; 7] = ["node", "bun", "deno", "php", "python", "python3", "ruby"];
+const SCRIPT_EXTENSIONS: [&str; 7] = [".js", ".mjs", ".cjs", ".ts", ".php", ".py", ".rb"];
+
+fn basename(token: &str) -> &str {
+    token.rsplit('/').next().unwrap_or(token)
+}
+
+/// Short display label for a process: program (or script for interpreters)
+/// plus up to two bare long flags. Argument values never appear, since argv
+/// can carry secrets.
+pub fn command_label(command: &str) -> String {
+    let mut tokens = command.split_whitespace();
+    let Some(first) = tokens.next() else {
+        return String::new();
+    };
+    let mut rest: Vec<&str> = tokens.collect();
+    let mut name = basename(first);
+    if INTERPRETERS.contains(&name) {
+        if let Some(script) = rest.first().filter(|token| !token.starts_with('-')) {
+            name = basename(script);
+            rest.remove(0);
+            for ext in SCRIPT_EXTENSIONS {
+                if let Some(stripped) = name.strip_suffix(ext) {
+                    name = stripped;
+                    break;
+                }
+            }
+        }
+    }
+    let flags = rest
+        .into_iter()
+        .filter(|token| token.starts_with("--") && !token.contains(['=', '/']))
+        .take(2);
+    std::iter::once(name)
+        .chain(flags)
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -158,5 +197,38 @@ mod tests {
             ),
         ];
         assert!(acp_agents(&processes, &[]).is_empty());
+    }
+
+    #[test]
+    fn command_label_uses_script_name_for_interpreters() {
+        assert_eq!(
+            command_label(
+                "/opt/homebrew/bin/node /Users/km/Sites/witte/node_modules/.bin/webpack --watch"
+            ),
+            "webpack --watch"
+        );
+    }
+
+    #[test]
+    fn command_label_uses_basename_for_binaries() {
+        assert_eq!(
+            command_label("/usr/local/bin/mysqld --datadir=/var/lib/mysql"),
+            "mysqld"
+        );
+    }
+
+    #[test]
+    fn command_label_drops_values_and_short_flags() {
+        assert_eq!(
+            command_label(
+                "/usr/bin/mysql -pSECRET --password=hunter2 --batch https://x.io/?token=abc"
+            ),
+            "mysql --batch"
+        );
+    }
+
+    #[test]
+    fn command_label_keeps_at_most_two_long_flags() {
+        assert_eq!(command_label("/bin/tool --a --b --c"), "tool --a --b");
     }
 }
