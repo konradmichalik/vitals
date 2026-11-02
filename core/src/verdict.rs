@@ -156,7 +156,11 @@ fn culprit(consumer: &Consumer, reason: &str) -> Culprit {
 fn cpu_action(consumer: &Consumer) -> Option<SuggestedAction> {
     let cores = (consumer.cpu_percent / 100.0).round().max(1.0) as u32;
     consumer.action.clone().map(|action| SuggestedAction {
-        estimate: Some(format!("about {cores} cores")),
+        estimate: Some(if cores == 1 {
+            "about 1 core".to_string()
+        } else {
+            format!("about {cores} cores")
+        }),
         ..action
     })
 }
@@ -277,7 +281,7 @@ mod tests {
         assert_eq!(v.culprit.unwrap().reason, "uses the most CPU");
         let act = v.action.unwrap();
         assert_eq!(act.action, "stop_project");
-        assert_eq!(act.estimate.as_deref(), Some("about 1 cores"));
+        assert_eq!(act.estimate.as_deref(), Some("about 1 core"));
     }
 
     #[test]
