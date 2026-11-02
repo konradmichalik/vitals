@@ -16,6 +16,11 @@ enum ActionOutcome: Equatable {
     case checking(SuggestedAction, since: Date)
     case failed(SuggestedAction, message: String)
 
+    var isRunning: Bool {
+        if case .running = self { return true }
+        return false
+    }
+
     /// A fallback so "Checking…" cannot hang forever when polling stalls.
     static let checkingTimeout: TimeInterval = 60
 

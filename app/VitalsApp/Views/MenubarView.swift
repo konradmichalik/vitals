@@ -1,31 +1,14 @@
 import SwiftUI
 
-/// The overview screen. Every action offered on it runs through the one confirmation alert here.
+/// The overview screen. Every action offered on it runs through the shared `.confirmingActions` alert.
 struct MenubarView: View {
     @EnvironmentObject private var appState: AppState
     let navigate: (PopoverScreen) -> Void
 
     @State private var pending: PendingAction?
 
-    private struct PendingAction {
-        let action: SuggestedAction
-        let confirmation: ActionConfirmation
-    }
-
     var body: some View {
-        content
-            .alert(
-                pending?.confirmation.title ?? "",
-                isPresented: Binding(get: { pending != nil }, set: { if !$0 { pending = nil } }),
-                presenting: pending
-            ) { pending in
-                Button(pending.confirmation.buttonLabel, role: pending.confirmation.isDestructive ? .destructive : nil) {
-                    appState.perform(pending.action)
-                }
-                Button("Cancel", role: .cancel) {}
-            } message: { pending in
-                Text(message(for: pending.confirmation))
-            }
+        content.confirmingActions($pending)
     }
 
     @ViewBuilder
@@ -45,10 +28,7 @@ struct MenubarView: View {
     }
 
     private func reportView(_ report: VitalsReport) -> some View {
-        let isRunning: Bool = {
-            if case .running = appState.outcome { return true }
-            return false
-        }()
+        let isRunning = appState.outcome.isRunning
         return VStack(alignment: .leading, spacing: 12) {
             VerdictHero(
                 verdict: report.verdict,
@@ -78,12 +58,7 @@ struct MenubarView: View {
     }
 
     private func request(_ action: SuggestedAction, culpritLabel: String?) {
-        pending = PendingAction(action: action, confirmation: ActionConfirmation.make(for: action, culpritLabel: culpritLabel))
-    }
-
-    private func message(for confirmation: ActionConfirmation) -> String {
-        let effect = confirmation.effect.map { "Effect: \($0)" }
-        return [confirmation.body, effect, confirmation.reversal].compactMap { $0 }.joined(separator: "\n")
+        pending = PendingAction(action, culpritLabel: culpritLabel)
     }
 
     private func message(for error: VitalsCollectError) -> String {
