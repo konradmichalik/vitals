@@ -1,7 +1,7 @@
 //! Groups containers, sessions and processes into the "Top consumers" list.
 //! Each process or container is counted in exactly one group.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 
 use serde::{Deserialize, Serialize};
 
@@ -75,16 +75,33 @@ fn build_with_home(
     groups.extend(process_groups(report, processes, now, &runaway));
     groups.extend(orbstack_group(report));
 
-    groups.retain(|g| g.cpu_percent >= MIN_CPU_PERCENT || g.mem_bytes >= MIN_MEM_BYTES);
+    // The Claude tab lists sessions from this group, so an idle one must not vanish.
+    groups.retain(|g| {
+        g.kind == ConsumerKind::ClaudeCli
+            || g.cpu_percent >= MIN_CPU_PERCENT
+            || g.mem_bytes >= MIN_MEM_BYTES
+    });
     groups.sort_by(|a, b| b.mem_bytes.cmp(&a.mem_bytes));
-    // The verdict names runaways as culprits, so the memory cap must not drop them.
+    let busiest = busiest_ids(&groups);
     let overflow = groups.split_off(MAX_GROUPS.min(groups.len()));
-    groups.extend(
-        overflow
-            .into_iter()
-            .filter(|g| runaway.iter().any(|&pid| g.id == process_id(pid))),
-    );
+    // Runaways are verdict culprits and the CPU-heavy groups are what a CPU sort expects to find,
+    // so the memory cap must not drop them.
+    groups.extend(overflow.into_iter().filter(|g| {
+        g.kind == ConsumerKind::ClaudeCli
+            || busiest.contains(&g.id)
+            || runaway.iter().any(|&pid| g.id == process_id(pid))
+    }));
     groups
+}
+
+fn busiest_ids(groups: &[Consumer]) -> HashSet<String> {
+    let mut by_cpu: Vec<&Consumer> = groups.iter().collect();
+    by_cpu.sort_by(|a, b| b.cpu_percent.total_cmp(&a.cpu_percent));
+    by_cpu
+        .into_iter()
+        .take(MAX_GROUPS)
+        .map(|g| g.id.clone())
+        .collect()
 }
 
 /// Consumer id of a plain process, also how the verdict finds a runaway.
@@ -535,6 +552,31 @@ mod tests {
         let groups = run(&report(), &processes);
         assert_eq!(groups.len(), 13);
         assert_eq!(groups[12].id, "proc:900");
+    }
+
+    #[test]
+    fn cpu_heavy_group_survives_the_memory_cap() {
+        let mut processes: Vec<ProcessEntry> = (0..12)
+            .map(|i| process(100 + i, "/bin/x", "x", (i as u64 + 1) * GB))
+            .collect();
+        let build = ProcessEntry {
+            cpu_percent: 80.0,
+            ..process(900, "/usr/bin/clang", "clang", 150 * 1024 * 1024)
+        };
+        processes.push(build);
+        let groups = run(&report(), &processes);
+        assert!(groups.iter().any(|g| g.id == "proc:900"));
+    }
+
+    #[test]
+    fn idle_claude_group_is_kept_for_the_claude_tab() {
+        let mut report = report();
+        let mut quiet = session(77, 600);
+        quiet.rss_bytes = 10 * 1024 * 1024;
+        report.processes.claude_sessions = vec![quiet];
+        let groups = run(&report, &[]);
+        let claude = groups.iter().find(|g| g.kind == ConsumerKind::ClaudeCli);
+        assert_eq!(claude.map(|g| g.children.len()), Some(1));
     }
 
     #[test]

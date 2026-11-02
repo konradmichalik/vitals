@@ -168,6 +168,14 @@ fn confirm(action: &Action) -> bool {
     matches!(input.trim().to_lowercase().as_str(), "y" | "yes")
 }
 
+/// ddev would read a leading dash as a flag, and `--yes` skips the prompt that would show it.
+fn project_name(name: &str) -> Result<&str, String> {
+    if name.is_empty() || name.starts_with('-') {
+        return Err(format!("`{name}` is not a valid ddev project name"));
+    }
+    Ok(name)
+}
+
 /// Turns the action name and target into an `Action`, failing early with a
 /// readable message. `report` is only needed by `kill_orphaned_agents`,
 /// `processes` by `kill_runaway_processes` and `kill_process`; every other
@@ -225,11 +233,11 @@ fn build_action(
         }
         "stop_project" => {
             let name = target.ok_or("`stop_project` requires --target <project-name>")?;
-            Ok(Action::StopProject(name.to_string()))
+            Ok(Action::StopProject(project_name(name)?.to_string()))
         }
         "start_project" => {
             let name = target.ok_or("`start_project` requires --target <project-name>")?;
-            Ok(Action::StartProject(name.to_string()))
+            Ok(Action::StartProject(project_name(name)?.to_string()))
         }
         "kill_process" => {
             let target = target.ok_or("`kill_process` requires --target <pid>@<started_at>")?;
@@ -712,6 +720,16 @@ mod tests {
             build_action("start_project", Some("witte"), None, None, &config, 0).unwrap(),
             Action::StartProject("witte".to_string())
         );
+    }
+
+    #[test]
+    fn build_action_project_names_cannot_look_like_flags() {
+        let config = Config::default();
+        for action in ["start_project", "stop_project"] {
+            assert!(build_action(action, Some("--all"), None, None, &config, 0).is_err());
+            assert!(build_action(action, Some("-x"), None, None, &config, 0).is_err());
+            assert!(build_action(action, Some(""), None, None, &config, 0).is_err());
+        }
     }
 
     #[test]
