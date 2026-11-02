@@ -35,5 +35,19 @@ jobs:
         run: brew install xcodegen swiftlint
       - name: Test
         run: make -C app test
+      # An ad-hoc signed host-arch build for trying the PR locally without Xcode.
+      - name: Build app
+        run: |
+          cd app
+          xcodebuild -project VitalsApp.xcodeproj -scheme VitalsApp -configuration Release \
+            -derivedDataPath build ONLY_ACTIVE_ARCH=YES \
+            CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO build
+          ditto -c -k --keepParent build/Build/Products/Release/VitalsApp.app VitalsApp.zip
+      - name: Upload app
+        uses: actions/upload-artifact@v4
+        with:
+          name: VitalsApp-${{ github.run_number }}
+          path: app/VitalsApp.zip
+          retention-days: 7
       - name: Lint
         run: make -C app lint-swift
