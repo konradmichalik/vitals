@@ -53,6 +53,11 @@ hood — two different suffix tables (`parse_docker_size` vs `parse_image_size` 
 it on any breaking field change — the menubar app and any other consumer depend on
 this shape.
 
+Schema 4 adds `processes.topByMemory` (5 entries, highest `rssBytes` first), per-process
+`label` (from `classify::command_label`), `rssBytes` and `startedAt` (Unix seconds, now
+minus `ps` elapsed time) on every `TopProcess`, and `ddev.projects` (`name` and `status`
+for every DDEV project, including stopped ones).
+
 ## Rule engine
 
 Rules live in `core/src/rules.rs`. `evaluate(report, processes, config)` calls one

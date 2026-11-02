@@ -4,7 +4,7 @@
 
 use serde::{Deserialize, Serialize};
 
-pub const SCHEMA_VERSION: u32 = 3;
+pub const SCHEMA_VERSION: u32 = 4;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -99,6 +99,14 @@ pub struct DdevInfo {
     pub problems: Vec<String>,
     pub paused_count: u32,
     pub stopped_count: u32,
+    pub projects: Vec<DdevProjectStatus>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DdevProjectStatus {
+    pub name: String,
+    pub status: String,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -136,6 +144,7 @@ pub struct ProcessesInfo {
     /// critical `load_status` finding isn't just a number with no way to
     /// tell what's causing it.
     pub top_by_cpu: Vec<TopProcess>,
+    pub top_by_memory: Vec<TopProcess>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -143,7 +152,11 @@ pub struct ProcessesInfo {
 pub struct TopProcess {
     pub pid: u32,
     pub name: String,
+    pub label: String,
     pub cpu_percent: f64,
+    pub rss_bytes: u64,
+    /// Unix seconds, derived as now minus `ps` elapsed time.
+    pub started_at: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

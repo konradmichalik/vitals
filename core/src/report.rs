@@ -59,11 +59,13 @@ pub fn collect(config: &Config) -> Result<(types::VitalsReport, Vec<ProcessEntry
     };
 
     let process_entries = probes::processes::list()?;
+    let now = time::OffsetDateTime::now_utc().unix_timestamp().max(0) as u64;
     let processes = types::ProcessesInfo {
         claude_sessions: claude_sessions(&process_entries),
         acp_agents: classify::acp_agents(&process_entries, &config.ide.retired_versions),
         orbstack: probes::orbstack::find()?,
-        top_by_cpu: top_processes(&process_entries, 5),
+        top_by_cpu: top_processes_by(&process_entries, 5, now, SortKey::Cpu),
+        top_by_memory: top_processes_by(&process_entries, 5, now, SortKey::Memory),
     };
 
     let report = types::VitalsReport {
@@ -103,18 +105,35 @@ fn claude_sessions(processes: &[ProcessEntry]) -> Vec<types::ClaudeSession> {
         .collect()
 }
 
-/// Sorted highest-CPU-first; `comm` is stripped to its bare name to match
-/// how `rules::runaway_processes` already names offenders.
-fn top_processes(processes: &[ProcessEntry], limit: usize) -> Vec<types::TopProcess> {
+#[derive(Clone, Copy)]
+enum SortKey {
+    Cpu,
+    Memory,
+}
+
+/// Sorted highest-first by `key`; `comm` is stripped to its bare name to
+/// match how `rules::runaway_processes` already names offenders.
+fn top_processes_by(
+    processes: &[ProcessEntry],
+    limit: usize,
+    now: u64,
+    key: SortKey,
+) -> Vec<types::TopProcess> {
     let mut sorted: Vec<&ProcessEntry> = processes.iter().collect();
-    sorted.sort_by(|a, b| b.cpu_percent.total_cmp(&a.cpu_percent));
+    match key {
+        SortKey::Cpu => sorted.sort_by(|a, b| b.cpu_percent.total_cmp(&a.cpu_percent)),
+        SortKey::Memory => sorted.sort_by(|a, b| b.rss_bytes.cmp(&a.rss_bytes)),
+    }
     sorted
         .into_iter()
         .take(limit)
         .map(|p| types::TopProcess {
             pid: p.pid,
             name: p.comm.rsplit('/').next().unwrap_or(&p.comm).to_string(),
+            label: classify::command_label(&p.command),
             cpu_percent: p.cpu_percent,
+            rss_bytes: p.rss_bytes,
+            started_at: now.saturating_sub(p.etime_seconds),
         })
         .collect()
 }
@@ -168,6 +187,15 @@ mod tests {
         }
     }
 
+    fn process_with_rss(pid: u32, rss_bytes: u64) -> ProcessEntry {
+        ProcessEntry {
+            rss_bytes,
+            ..process(pid, "p", 0.0)
+        }
+    }
+
+    const NOW: u64 = 1_000_000;
+
     #[test]
     fn top_processes_orders_by_cpu_percent_descending() {
         let processes = vec![
@@ -175,7 +203,7 @@ mod tests {
             process(2, "b", 90.0),
             process(3, "c", 50.0),
         ];
-        let top = top_processes(&processes, 5);
+        let top = top_processes_by(&processes, 5, NOW, SortKey::Cpu);
         assert_eq!(top.iter().map(|p| p.pid).collect::<Vec<_>>(), vec![2, 3, 1]);
     }
 
@@ -186,14 +214,46 @@ mod tests {
             process(2, "b", 90.0),
             process(3, "c", 50.0),
         ];
-        let top = top_processes(&processes, 2);
+        let top = top_processes_by(&processes, 2, NOW, SortKey::Cpu);
         assert_eq!(top.len(), 2);
     }
 
     #[test]
     fn top_processes_strips_full_path_to_bare_name() {
         let processes = vec![process(1, "/usr/local/bin/node", 10.0)];
-        let top = top_processes(&processes, 5);
+        let top = top_processes_by(&processes, 5, NOW, SortKey::Cpu);
         assert_eq!(top[0].name, "node");
+    }
+
+    #[test]
+    fn top_by_memory_sorts_by_rss() {
+        const GB: u64 = 1024 * 1024 * 1024;
+        let processes = vec![
+            process_with_rss(1, GB),
+            process_with_rss(2, 3 * GB),
+            process_with_rss(3, 2 * GB),
+        ];
+        let top = top_processes_by(&processes, 5, NOW, SortKey::Memory);
+        assert_eq!(top.iter().map(|p| p.pid).collect::<Vec<_>>(), vec![2, 3, 1]);
+    }
+
+    #[test]
+    fn started_at_is_now_minus_etime() {
+        let processes = vec![ProcessEntry {
+            etime_seconds: 600,
+            ..process(1, "a", 1.0)
+        }];
+        let top = top_processes_by(&processes, 5, 1_000_000, SortKey::Cpu);
+        assert_eq!(top[0].started_at, 999_400);
+    }
+
+    #[test]
+    fn top_process_label_comes_from_command_label() {
+        let processes = vec![ProcessEntry {
+            command: "node /Users/me/app/node_modules/.bin/webpack --watch".to_string(),
+            ..process(1, "node", 1.0)
+        }];
+        let top = top_processes_by(&processes, 5, NOW, SortKey::Cpu);
+        assert_eq!(top[0].label, "webpack --watch");
     }
 }
