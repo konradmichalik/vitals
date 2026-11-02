@@ -101,6 +101,9 @@ start time of that PID (`now - etime`) with `started_at`. A missing PID or a dif
 over 2 seconds aborts with "no longer the one shown, refresh and try again", so a reused
 PID is never killed. PID 1 is refused. There is no bare-PID form.
 
+`start_project` takes `--target <project-name>` and runs `ddev start <name>` through
+`run_with_timeout` (180 s), the "Start again" follow-up to `stop_project`.
+
 ## Menubar app (app/)
 
 `app/vitals-ffi/src/lib.rs` exposes exactly two `#[no_mangle] extern "C"` functions:

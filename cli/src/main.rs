@@ -19,8 +19,8 @@ struct Cli {
     #[arg(long)]
     no_color: bool,
 
-    /// Apply a remediation action: poweroff, stop_project, stop_backup,
-    /// add_exclusions, kill_orphaned_agents, kill_runaway_processes,
+    /// Apply a remediation action: poweroff, stop_project, start_project,
+    /// stop_backup, add_exclusions, kill_orphaned_agents, kill_runaway_processes,
     /// kill_process, prune_docker_images
     #[arg(long, value_name = "ACTION")]
     fix: Option<String>,
@@ -223,6 +223,10 @@ fn build_action(
         "stop_project" => {
             let name = target.ok_or("`stop_project` requires --target <project-name>")?;
             Ok(Action::StopProject(name.to_string()))
+        }
+        "start_project" => {
+            let name = target.ok_or("`start_project` requires --target <project-name>")?;
+            Ok(Action::StartProject(name.to_string()))
         }
         "kill_process" => {
             let target = target.ok_or("`kill_process` requires --target <pid>@<started_at>")?;
@@ -664,6 +668,16 @@ mod tests {
         assert_eq!(
             build_action("stop_project", Some("witte"), None, None, &config, 0).unwrap(),
             Action::StopProject("witte".to_string())
+        );
+    }
+
+    #[test]
+    fn build_action_start_project_requires_target() {
+        let config = Config::default();
+        assert!(build_action("start_project", None, None, None, &config, 0).is_err());
+        assert_eq!(
+            build_action("start_project", Some("witte"), None, None, &config, 0).unwrap(),
+            Action::StartProject("witte".to_string())
         );
     }
 

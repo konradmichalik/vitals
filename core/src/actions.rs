@@ -5,6 +5,7 @@
 use crate::error::VitalsError;
 use crate::probes::processes::ProcessEntry;
 use crate::probes::shell;
+use std::time::Duration;
 
 /// Every name `vitals --fix <name>` accepts — the single source of truth
 /// shared by the CLI's parser error message and the rules' contract test,
@@ -12,6 +13,7 @@ use crate::probes::shell;
 pub const ACTION_NAMES: &[&str] = &[
     "poweroff",
     "stop_project",
+    "start_project",
     "stop_backup",
     "add_exclusions",
     "kill_orphaned_agents",
@@ -24,6 +26,7 @@ pub const ACTION_NAMES: &[&str] = &[
 pub enum Action {
     Poweroff,
     StopProject(String),
+    StartProject(String),
     StopBackup,
     AddExclusions(Vec<String>),
     KillOrphanedAgents(Vec<u32>),
@@ -49,6 +52,7 @@ impl Action {
         match self {
             Action::Poweroff => "ddev poweroff".to_string(),
             Action::StopProject(name) => format!("ddev stop {name}"),
+            Action::StartProject(name) => format!("ddev start {name}"),
             Action::StopBackup => "tmutil stopbackup".to_string(),
             Action::AddExclusions(paths) => format!("tmutil addexclusion {}", paths.join(" ")),
             Action::KillOrphanedAgents(pids) => format!("kill {}", join_pids(pids)),
@@ -62,6 +66,10 @@ impl Action {
         match self {
             Action::Poweroff => shell::run("ddev", &["poweroff"]).map(drop),
             Action::StopProject(name) => shell::run("ddev", &["stop", name]).map(drop),
+            Action::StartProject(name) => {
+                shell::run_with_timeout("ddev", &["start", name], Duration::from_secs(180))
+                    .map(drop)
+            }
             Action::StopBackup => shell::run("tmutil", &["stopbackup"]).map(drop),
             Action::AddExclusions(paths) => {
                 let mut args = vec!["addexclusion"];
@@ -153,6 +161,14 @@ mod tests {
         assert_eq!(
             Action::StopProject("witte".to_string()).describe(),
             "ddev stop witte"
+        );
+    }
+
+    #[test]
+    fn describes_start_project_with_name() {
+        assert_eq!(
+            Action::StartProject("witte".to_string()).describe(),
+            "ddev start witte"
         );
     }
 
