@@ -1,40 +1,29 @@
 import AppKit
 import UserNotifications
 
-/// Posts a system notification — used both for a finding newly entering
-/// critical severity, and for the result of a "Run"/"Stop" action
-/// (§9: the app's own confirmation already gates the run; the
-/// notification is just reliable feedback once it's done, since the
-/// dropdown may well be closed by then). Not unit tested: it's a thin
-/// pass-through to `UNUserNotificationCenter` with real side effects
+/// Posts a system notification for a finding newly entering warn or
+/// critical severity; action results show in the popover instead.
+/// Not unit tested: it's a thin pass-through to `UNUserNotificationCenter` with real side effects
 /// (actual banners, actual permission prompts), matching
 /// `LaunchAtLogin`'s rationale.
 enum AppNotifier {
     /// Single source of truth for the `@AppStorage` key shared by
     /// `AppDelegate`, `AppState`, and `PopoverSettingsView`. Declaring it three
     /// times independently would let a typo in one silently desync it
-    /// from the others. Only gates warn/critical finding notifications; a
-    /// user-triggered action's own result always notifies regardless,
-    /// since they explicitly asked for that action to run.
+    /// from the others.
     static let alertStorageKey = "notifyOnAlerts"
 
-    /// Drives the notification's large attachment image — the small
-    /// corner badge already shows the app's own icon (via bundle
-    /// identity), so this is the one visual that can actually tell a
-    /// critical finding apart from a routine "action succeeded" banner
-    /// at a glance, without opening the dropdown.
+    /// Drives the notification's large attachment image. The small corner
+    /// badge already shows the app's own icon, so this is the one visual
+    /// that tells a critical finding apart from a warning at a glance.
     enum Kind {
         case critical
         case warning
-        case success
-        case failure
 
         var symbolName: String {
             switch self {
             case .critical: return "exclamationmark.triangle.fill"
             case .warning: return "exclamationmark.triangle.fill"
-            case .success: return "checkmark.circle.fill"
-            case .failure: return "xmark.circle.fill"
             }
         }
 
@@ -42,8 +31,6 @@ enum AppNotifier {
             switch self {
             case .critical: return .systemRed
             case .warning: return .systemOrange
-            case .success: return .systemGreen
-            case .failure: return .systemRed
             }
         }
     }
@@ -61,7 +48,7 @@ enum AppNotifier {
     }
 
     /// `rule` marks a finding banner: it gets the action buttons and carries
-    /// the rule for the response handler. Action-result banners pass nil.
+    /// the rule for the response handler.
     @MainActor
     static func notify(id: String, title: String, body: String, kind: Kind, rule: String? = nil) {
         let content = UNMutableNotificationContent()
@@ -129,8 +116,6 @@ extension AppNotifier.Kind: CustomStringConvertible {
         switch self {
         case .critical: return "critical"
         case .warning: return "warning"
-        case .success: return "success"
-        case .failure: return "failure"
         }
     }
 }

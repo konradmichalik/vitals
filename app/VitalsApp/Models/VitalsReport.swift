@@ -28,6 +28,8 @@ struct CpuUsage: Codable {
     let userPercent: Double
     let systemPercent: Double
     let idlePercent: Double
+
+    var usedPercent: Double { 100 - idlePercent }
 }
 
 struct LoadAverage: Codable {
@@ -127,44 +129,6 @@ struct ClaudeSession: Codable, Identifiable {
     let workingDirectory: String?
 
     var id: UInt32 { pid }
-
-    /// Every session on a machine typically shares the same `version`,
-    /// so it doesn't tell parallel sessions apart the way their project
-    /// does — this falls back to the version only when no working
-    /// directory could be resolved at all.
-    var projectLabel: String {
-        guard let workingDirectory, let name = workingDirectory.split(separator: "/").last else {
-            return "v\(version)"
-        }
-        return String(name)
-    }
-}
-
-struct ClaudeSessionGroup: Identifiable {
-    let label: String
-    let count: Int
-    let longestEtimeSeconds: UInt64
-    let cpuPercent: Double
-
-    var id: String { label }
-}
-
-extension [ClaudeSession] {
-    /// Parallel sessions in the same project are common (multiple
-    /// terminal tabs on the same repo) and would otherwise repeat the
-    /// same project label as several indistinguishable rows.
-    func groupedByProject() -> [ClaudeSessionGroup] {
-        Dictionary(grouping: self, by: \.projectLabel)
-            .map { label, sessions in
-                ClaudeSessionGroup(
-                    label: label,
-                    count: sessions.count,
-                    longestEtimeSeconds: sessions.map(\.etimeSeconds).max() ?? 0,
-                    cpuPercent: sessions.reduce(0) { $0 + $1.cpuPercent }
-                )
-            }
-            .sorted { $0.cpuPercent != $1.cpuPercent ? $0.cpuPercent > $1.cpuPercent : $0.label < $1.label }
-    }
 }
 
 struct AcpAgent: Codable {

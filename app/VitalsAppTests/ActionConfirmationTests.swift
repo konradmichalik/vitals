@@ -91,4 +91,9 @@ final class ActionConfirmationTests: XCTestCase {
         XCTAssertEqual(result.effect, "about 2 cores")
         XCTAssertEqual(make("poweroff").command, "vitals --fix poweroff")
     }
+
+    func testBodyIsPlainTextWithoutMarkdown() {
+        XCTAssertEqual(make("poweroff").body, "This runs vitals --fix poweroff.")
+        XCTAssertEqual(make("kill_process", target: "1@2").body, "This runs vitals --fix kill_process --target 1@2.")
+    }
 }

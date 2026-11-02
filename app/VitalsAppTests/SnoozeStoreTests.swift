@@ -49,4 +49,15 @@ final class SnoozeStoreTests: XCTestCase {
         store.save([snooze])
         XCTAssertEqual(store.load(), [snooze])
     }
+
+    func test_active_drops_expired_snoozes() {
+        let now = date(hour: 10)
+        let snoozes = [
+            Snooze(rule: "running", until: now.addingTimeInterval(60), bootTime: nil),
+            Snooze(rule: "expired", until: now, bootTime: nil),
+            Snooze(rule: "this_boot", until: nil, bootTime: boot),
+            Snooze(rule: "old_boot", until: nil, bootTime: boot.addingTimeInterval(-500)),
+        ]
+        XCTAssertEqual(SnoozeStore.active(snoozes, now: now, bootTime: boot).map(\.rule), ["running", "this_boot"])
+    }
 }

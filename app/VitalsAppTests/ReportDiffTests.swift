@@ -67,4 +67,19 @@ final class ReportDiffTests: XCTestCase {
         let steady = try report(ddev: ["a"], findings: finding("load", "warn", "Load is high"))
         XCTAssertEqual(ReportDiff.events(previous: steady, current: steady, at: now), [])
     }
+
+    func testWarnEscalatingToCriticalEmitsTheCriticalMessage() throws {
+        let previous = try report(findings: finding("load", "warn", "Load is high"))
+        let current = try report(findings: finding("load", "critical", "Load is critical"))
+        let events = ReportDiff.events(previous: previous, current: current, at: now)
+        XCTAssertEqual(events.map(\.title), ["Load is critical"])
+        XCTAssertEqual(events.map(\.severity), [.critical])
+    }
+
+    func testTwoFindingsEnteringTogetherKeepTheReportOrder() throws {
+        let both = [finding("memory", "warn", "Memory is tight"), finding("load", "critical", "Load is critical")]
+        let current = try report(findings: both.joined(separator: ","))
+        let events = ReportDiff.events(previous: try report(), current: current, at: now)
+        XCTAssertEqual(events.map(\.title), ["Memory is tight", "Load is critical"])
+    }
 }

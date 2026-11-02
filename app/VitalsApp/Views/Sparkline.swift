@@ -46,12 +46,22 @@ struct Sparkline: View {
         .sparklineChartStyle()
         .chartOverlay { proxy in
             SparklineHoverOverlay(proxy: proxy, sampleCount: values.count, hoveredIndex: $hoveredIndex) { index in
-                guard let y = proxy.position(forY: values[index]) else { return nil }
+                guard values.indices.contains(index), let y = proxy.position(forY: values[index]) else { return nil }
                 return SparklineIndicator(points: [IndicatorPoint(y: y, color: color)], tooltip: tooltip(index))
             }
         }
         .frame(maxWidth: .infinity)
         .frame(height: 24)
+        // The window shrinks as samples age out, and the pointer may rest without moving.
+        .onChange(of: values.count) { hoveredIndex = nil }
+    }
+}
+
+enum SparklineHover {
+    /// A stored hover index survives re-renders, so it is only usable while it still points into the current values.
+    static func validIndex(_ index: Int?, count: Int) -> Int? {
+        guard let index, (0..<count).contains(index) else { return nil }
+        return index
     }
 }
 
@@ -109,7 +119,7 @@ private struct SparklineHoverOverlay: View {
                         }
                     }
 
-                if let hoveredIndex, let plotFrame,
+                if let hoveredIndex = SparklineHover.validIndex(hoveredIndex, count: sampleCount), let plotFrame,
                    let x = proxy.position(forX: hoveredIndex),
                    let result = indicator(hoveredIndex) {
                     let originX = plotFrame.origin.x + x

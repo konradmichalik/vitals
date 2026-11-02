@@ -130,4 +130,15 @@ final class MetricSampleTests: XCTestCase {
         XCTAssertEqual(HistoryRange.allCases.map(\.seconds), [900, 3600])
         XCTAssertEqual(HistoryRange.allCases.map(\.label), ["15m", "1h"])
     }
+
+    func testCpuUsedPercentIsTheComplementOfIdle() {
+        XCTAssertEqual(CpuUsage(userPercent: 0, systemPercent: 0, idlePercent: 30).usedPercent, 70, accuracy: 0.001)
+    }
+
+    func testCurrentValueReadsLikeTheDetailScreen() {
+        let live = report(load1: 7.4, idlePercent: 30, memoryUsedPercent: 60, swapUsedBytes: 3 * 1024 * 1024 * 1024)
+        XCTAssertEqual(MetricSeries.format(.load, MetricSeries.current(.load, report: live)), "0.7×")
+        XCTAssertEqual(MetricSeries.current(.cpu, report: live), 70, accuracy: 0.001)
+        XCTAssertEqual(MetricSeries.current(.swap, report: live), 3, accuracy: 0.001)
+    }
 }

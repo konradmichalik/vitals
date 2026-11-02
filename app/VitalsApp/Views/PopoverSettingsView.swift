@@ -58,20 +58,22 @@ struct PopoverSettingsView: View {
     }
 
     private var snoozedSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        // Expired snoozes are only pruned on the next refresh, so they are filtered here as well.
+        let snoozes = SnoozeStore.active(appState.snoozes, now: Date(), bootTime: SnoozeStore.currentBootTime())
+        return VStack(alignment: .leading, spacing: 6) {
             SectionHeader(icon: "bell.slash", title: "Snoozed findings")
-            if appState.snoozes.isEmpty {
+            if snoozes.isEmpty {
                 subtitle("Nothing snoozed.")
             }
-            ForEach(appState.snoozes, id: \.rule) { snooze in
+            ForEach(snoozes, id: \.rule) { snooze in
                 HStack {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(snooze.rule).font(.callout)
+                        Text(RuleTitle.title(for: snooze.rule)).font(.callout)
                         subtitle(endText(for: snooze))
                     }
                     Spacer()
                     Button("Unsnooze") { appState.unsnooze(rule: snooze.rule) }
-                        .accessibilityLabel("Unsnooze \(snooze.rule)")
+                        .accessibilityLabel("Unsnooze \(RuleTitle.title(for: snooze.rule))")
                 }
             }
         }

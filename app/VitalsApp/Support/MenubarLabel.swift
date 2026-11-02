@@ -10,11 +10,22 @@ enum MenubarLabel {
         }
         // Load wins when both fire, matching the verdict precedence.
         if isCritical("load_status") {
-            return "CPU \(Int((100 - report.system.cpu.idlePercent).rounded()))%"
+            return "CPU \(Int(report.system.cpu.usedPercent.rounded()))%"
         }
         if isCritical("memory_pressure") {
             return "Mem \(TileTone.pressureLabel(report.system.memory.pressureLevel))"
         }
         return nil
+    }
+
+    /// The badge's color and shape are invisible to VoiceOver, so the status goes into the label.
+    static func accessibilityLabel(findings: [Finding], text: String?) -> String {
+        let status: String?
+        switch TrafficLight.from(findings: findings) {
+        case .green: status = nil
+        case .yellow: status = "warning"
+        case .red: status = "critical"
+        }
+        return (["Vitals"] + [status, text].compactMap { $0 }).joined(separator: ", ")
     }
 }

@@ -17,6 +17,11 @@ enum MetricSeries {
         }
     }
 
+    /// The live value, read the same way as a stored sample so tile, detail and chart agree.
+    static func current(_ kind: MetricKind, report: VitalsReport) -> Double {
+        values(kind, from: [.from(report: report)], performanceCores: report.system.cores.performance).first ?? 0
+    }
+
     static func format(_ kind: MetricKind, _ value: Double) -> String {
         switch kind {
         case .cpu, .memory: return "\(Int(value.rounded()))%"

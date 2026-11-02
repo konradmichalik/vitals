@@ -23,7 +23,7 @@ struct ActionConfirmation: Equatable {
         let command = "vitals --fix \(action.action)" + (action.target.map { " --target \($0)" } ?? "")
         return ActionConfirmation(
             title: copy.title,
-            body: "This runs `\(command)`.",
+            body: "This runs \(command).",
             command: command,
             effect: action.estimate,
             reversal: copy.reversal,

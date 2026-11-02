@@ -19,6 +19,7 @@ final class AppState: ObservableObject {
     private var lastNotifiedAt: [String: Date] = [:]
     private var pollTask: Task<Void, Never>?
     private var previousReport: VitalsReport?
+    private var refreshOrder = RefreshOrder()
     private var activityWrites: Task<Void, Never>?
 
     nonisolated static let greenInterval: TimeInterval = 30
@@ -34,8 +35,7 @@ final class AppState: ObservableObject {
 
     init() {
         history = historyStore.load()
-        let bootTime = SnoozeStore.currentBootTime()
-        snoozes = snoozeStore.load().filter { SnoozeStore.isActive($0, now: Date(), bootTime: bootTime) }
+        snoozes = SnoozeStore.active(snoozeStore.load(), now: Date(), bootTime: SnoozeStore.currentBootTime())
         let store = activityStore
         Task { [weak self] in
             let loaded = await Task.detached(priority: .utility) { store.load() }.value
@@ -77,9 +77,7 @@ final class AppState: ObservableObject {
     }
 
     private func pruneExpiredSnoozes() {
-        let now = Date()
-        let bootTime = SnoozeStore.currentBootTime()
-        let active = snoozes.filter { SnoozeStore.isActive($0, now: now, bootTime: bootTime) }
+        let active = SnoozeStore.active(snoozes, now: Date(), bootTime: SnoozeStore.currentBootTime())
         guard active.count != snoozes.count else { return }
         snoozes = active
         snoozeStore.save(active)
@@ -103,29 +101,40 @@ final class AppState: ObservableObject {
     }
 
     func refresh() async {
+        let sequence = refreshOrder.begin()
         let startedAt = Date()
         let result = await Task.detached(priority: .utility) {
             VitalsBridge.collect()
         }.value
 
+        // Refreshes overlap (poll, post-action, footer button), so one that started earlier can land last.
+        let isCurrent = refreshOrder.accept(sequence)
         switch result {
         case .success(let report):
-            self.report = report
-            self.lastError = nil
-            pruneExpiredSnoozes()
             outcome = ActionOutcome.reduce(outcome, .reportArrived(timestamp: startedAt))
-            history = MetricHistory.appending(.from(report: report), to: history)
-            historyStore.save(history)
-            notifyAboutNewAlertingFindings(in: report.findings)
-            let events = ReportDiff.events(previous: previousReport, current: report, at: startedAt)
-            previousReport = report
-            recordActivity(events, now: startedAt)
+            if isCurrent {
+                apply(report, startedAt: startedAt)
+            }
         case .failure(let error):
-            self.lastError = error
+            if isCurrent {
+                lastError = error
+            }
         }
         let now = Date()
         lastUpdated = now
         outcome = ActionOutcome.reduce(outcome, .tick(now: now))
+    }
+
+    private func apply(_ report: VitalsReport, startedAt: Date) {
+        self.report = report
+        lastError = nil
+        pruneExpiredSnoozes()
+        history = MetricHistory.appending(.from(report: report), to: history)
+        historyStore.save(history)
+        notifyAboutNewAlertingFindings(in: report.findings)
+        let events = ReportDiff.events(previous: previousReport, current: report, at: startedAt)
+        previousReport = report
+        recordActivity(events, now: startedAt)
     }
 
     /// Writes are chained so two quick appends cannot read the same file and drop one.

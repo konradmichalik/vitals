@@ -227,9 +227,18 @@ outdated store loads as empty instead of blocking launch.
 `Support/ActionOutcome.swift` tracks one action from click to effect. `reduce(_:_:)` is
 pure, every timestamp comes in as an argument. States: `idle`, `running`, `checking` and
 `failed`. `started` moves to `running`. A successful `finished` moves to `checking`, a failed
-one to `failed` with the runner's message. `checking` returns to `idle` when a report
-timestamped after the action finished arrives, or after `checkingTimeout` (60 s) as a
-fallback if polling stalls. Every finished action is also written to the activity log.
+one to `failed` with the runner's message and the finish time. `checking` returns to `idle`
+when a report timestamped after the action finished arrives, or after `displayTimeout` (60 s)
+as a fallback if polling stalls. `failed` returns to `idle` after the same 60 s, so a failure
+does not stay pinned under later verdicts. A tick before the stored time (the clock stepped
+back) expires both states at once. Every finished action is also written to the
+activity log.
+
+Refreshes can overlap (poll loop, the refresh after an action, the footer button).
+`AppState` numbers each refresh as it starts (`Support/RefreshOrder.swift`, a counter rather
+than the wall clock, which can step back) and drops a result whose refresh started before the
+last accepted one. An older measurement never replaces a newer one or feeds the activity diff,
+history and notifications, and an older success cannot clear a newer failure's error.
 
 ### Notifications and menubar
 

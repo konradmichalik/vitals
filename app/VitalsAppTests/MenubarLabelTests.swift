@@ -57,4 +57,12 @@ final class MenubarLabelTests: XCTestCase {
         let high = report([finding("memory_pressure", .critical)], pressure: .warn)
         XCTAssertEqual(MenubarLabel.text(for: high, enabled: true), "Mem High")
     }
+
+    func testAccessibilityLabelNamesTheStatus() {
+        XCTAssertEqual(MenubarLabel.accessibilityLabel(findings: [], text: nil), "Vitals")
+        XCTAssertEqual(MenubarLabel.accessibilityLabel(findings: [finding("uptime_ballast", .info)], text: nil), "Vitals")
+        XCTAssertEqual(MenubarLabel.accessibilityLabel(findings: [finding("load_status", .warn)], text: nil), "Vitals, warning")
+        let critical = [finding("memory_pressure", .warn), finding("load_status", .critical)]
+        XCTAssertEqual(MenubarLabel.accessibilityLabel(findings: critical, text: "CPU 92%"), "Vitals, critical, CPU 92%")
+    }
 }

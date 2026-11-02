@@ -40,6 +40,10 @@ struct SnoozeStore {
         snoozes.contains { $0.rule == rule && isActive($0, now: now, bootTime: bootTime) }
     }
 
+    static func active(_ snoozes: [Snooze], now: Date, bootTime: Date) -> [Snooze] {
+        snoozes.filter { isActive($0, now: now, bootTime: bootTime) }
+    }
+
     static func isActive(_ snooze: Snooze, now: Date, bootTime: Date) -> Bool {
         if let until = snooze.until {
             return now < until

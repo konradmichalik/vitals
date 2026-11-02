@@ -11,9 +11,8 @@ struct ConsumersList: View {
     @State private var chosenSort: ConsumerSort?
     @State private var expanded: Set<String> = []
 
-    /// Keeps the popover short; the core already caps groups at 12.
+    /// Keeps the popover short; the core can send more than 12 groups because runaways are never capped.
     private static let visibleCount = 5
-    private static let gib = 1024.0 * 1024.0 * 1024.0
 
     var body: some View {
         if !consumers.isEmpty {
@@ -104,7 +103,7 @@ struct ConsumersList: View {
                 }
             }
             Spacer(minLength: 4)
-            Text(String(format: "%.0f%% · %.1f GB", cpu, Double(mem) / Self.gib))
+            Text(String(format: "%.0f%% · %.1f GB", cpu, Double(mem) / MetricSeries.gib))
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(.secondary)
         }

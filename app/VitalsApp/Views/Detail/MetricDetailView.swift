@@ -23,7 +23,7 @@ struct MetricDetailView: View {
         let samples = MetricHistory.window(appState.history, range: range, now: now)
         let cores = report.system.cores.performance
         let values = MetricSeries.values(kind, from: samples, performanceCores: cores)
-        let current = MetricSeries.values(kind, from: [.from(report: report, timestamp: now)], performanceCores: cores)[0]
+        let current = MetricSeries.current(kind, report: report)
         let tone = TileTone.tone(for: kind, report: report)
         return VStack(alignment: .leading, spacing: 12) {
             pickers
@@ -69,10 +69,10 @@ struct MetricDetailView: View {
         .accessibilityElement(children: .combine)
     }
 
-    private func stats(_ report: VitalsReport, current: Double, peak: Double?) -> some View {
+    private func stats(_ report: VitalsReport, current: Double, peak: Double) -> some View {
         HStack(alignment: .top, spacing: 16) {
             stat("Now", MetricSeries.format(kind, current))
-            stat("Peak \(range.label)", peak.map { MetricSeries.format(kind, $0) } ?? "No data")
+            stat("Peak \(range.label)", MetricSeries.format(kind, peak))
             switch kind {
             case .memory, .swap: stat("Pressure", TileTone.pressureLabel(report.system.memory.pressureLevel))
             case .load: stat("Limit", "1.0× / 1.5×")

@@ -73,7 +73,7 @@ struct VerdictHero: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             .accessibilityElement(children: .combine)
-        case .failed(_, let message):
+        case .failed(_, let message, _):
             Label(message, systemImage: "exclamationmark.triangle.fill")
                 .font(.caption)
                 .foregroundStyle(Tone.critical.color)

@@ -20,7 +20,10 @@ import UserNotifications
 final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, UNUserNotificationCenterDelegate {
     @AppStorage(AppNotifier.alertStorageKey) private var notifyOnAlerts = true
 
-    let appState = AppState()
+    /// Created after the test guard, so the XCTest host never polls the FFI or writes the user's stores.
+    private var appState: AppState?
+    /// A notification tap can launch the app and arrive before `appState` exists.
+    private var pendingResponse: NotificationResponse?
 
     private var statusItem: NSStatusItem?
     private var badgeView: NSView?
@@ -65,10 +68,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, UNU
         if notifyOnAlerts {
             AppNotifier.requestPermission()
         }
-        setupStatusItem()
+        let state = AppState()
+        appState = state
+        setupStatusItem(state)
+        if let pending = pendingResponse {
+            pendingResponse = nil
+            handle(pending)
+        }
     }
 
-    private func setupStatusItem() {
+    private func setupStatusItem(_ appState: AppState) {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = item.button {
             let icon = NSImage(systemSymbolName: "waveform.path.ecg", accessibilityDescription: "Vitals")
@@ -139,12 +148,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, UNU
         let enabled = defaults.object(forKey: QuietHours.menubarValueKey) == nil
             || defaults.bool(forKey: QuietHours.menubarValueKey)
         let text = latestReport.flatMap { MenubarLabel.text(for: $0, enabled: enabled) }
+        button.setAccessibilityLabel(MenubarLabel.accessibilityLabel(findings: latestReport?.findings ?? [], text: text))
         // Defaults change on every history or snooze write, not only for this key.
         guard text != shownLabel else { return }
         shownLabel = text
         button.title = text ?? ""
         anchorBadgeToImage(button)
-        button.setAccessibilityLabel(text.map { "Vitals, \($0)" } ?? "Vitals")
     }
 
     /// The dot only earns its keep as an interrupt for something worth
@@ -196,6 +205,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, UNU
     }
 
     private func handle(_ response: NotificationResponse) {
+        guard let appState else {
+            pendingResponse = response
+            return
+        }
         switch response {
         case .show: showOverview()
         case .snooze(let rule): appState.snooze(rule: rule, for: .oneHour)

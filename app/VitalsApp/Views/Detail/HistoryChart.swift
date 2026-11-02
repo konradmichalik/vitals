@@ -23,8 +23,8 @@ struct HistoryChart: View {
 
     private var chart: some View {
         Chart {
-            ForEach(Array(samples.enumerated()), id: \.offset) { index, sample in
-                LineMark(x: .value("Time", sample.timestamp), y: .value("Value", values[index]))
+            ForEach(Array(zip(samples, values).enumerated()), id: \.offset) { _, point in
+                LineMark(x: .value("Time", point.0.timestamp), y: .value("Value", point.1))
                     .foregroundStyle(Color.secondary)
                     .interpolationMethod(.catmullRom)
             }
@@ -36,7 +36,7 @@ struct HistoryChart: View {
                         Text("1.0×").font(.caption2).foregroundStyle(.secondary)
                     }
             }
-            if let selectedIndex, samples.indices.contains(selectedIndex) {
+            if let selectedIndex = SparklineHover.validIndex(selectedIndex, count: samples.count) {
                 RuleMark(x: .value("Selected", samples[selectedIndex].timestamp))
                     .foregroundStyle(Color.secondary.opacity(0.4))
             }
@@ -66,9 +66,13 @@ struct HistoryChart: View {
         }
     }
 
+    /// `selectedIndex` is state and outlives a shrinking window, so it is checked against both arrays.
     private var effectiveIndex: Int? {
-        if let selectedIndex, samples.indices.contains(selectedIndex) { return selectedIndex }
-        return samples.indices.last
+        SparklineHover.validIndex(selectedIndex, count: pointCount) ?? (pointCount > 0 ? pointCount - 1 : nil)
+    }
+
+    private var pointCount: Int {
+        min(samples.count, values.count)
     }
 
     private var selectionText: String? {
@@ -77,8 +81,8 @@ struct HistoryChart: View {
     }
 
     private func adjust(_ direction: AccessibilityAdjustmentDirection) {
-        guard let last = samples.indices.last else { return }
-        let current = effectiveIndex ?? last
+        guard let current = effectiveIndex else { return }
+        let last = pointCount - 1
         switch direction {
         case .increment: selectedIndex = min(current + 1, last)
         case .decrement: selectedIndex = max(current - 1, 0)

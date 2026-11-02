@@ -32,7 +32,7 @@ struct MetricSample: Equatable, Codable {
                 load1: report.system.load.m1,
                 performanceCores: report.system.cores.performance
             ),
-            cpuUsedPercent: 100 - report.system.cpu.idlePercent,
+            cpuUsedPercent: report.system.cpu.usedPercent,
             memoryUsedPercent: Double(report.system.memory.usedPercent),
             memoryPressure: report.system.memory.pressureLevel,
             swapUsedBytes: report.system.memory.swapUsedBytes,
