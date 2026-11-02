@@ -12,11 +12,14 @@ final class AppState: ObservableObject {
     @Published private(set) var history: [MetricSample] = []
     @Published private(set) var outcome: ActionOutcome = .idle
     @Published private(set) var snoozes: [Snooze] = []
+    @Published private(set) var activity: [ActivityEntry] = []
 
     @AppStorage(AppNotifier.alertStorageKey) private var notifyOnAlerts = true
     private var lastAlertSeverities: [String: Severity] = [:]
     private var lastNotifiedAt: [String: Date] = [:]
     private var pollTask: Task<Void, Never>?
+    private var previousReport: VitalsReport?
+    private var activityWrites: Task<Void, Never>?
 
     nonisolated static let greenInterval: TimeInterval = 30
     nonisolated static let alertInterval: TimeInterval = 10
@@ -27,11 +30,21 @@ final class AppState: ObservableObject {
 
     private let historyStore = MetricHistoryStore()
     private let snoozeStore = SnoozeStore()
+    private let activityStore = ActivityLogStore()
 
     init() {
         history = historyStore.load()
         let bootTime = SnoozeStore.currentBootTime()
         snoozes = snoozeStore.load().filter { SnoozeStore.isActive($0, now: Date(), bootTime: bootTime) }
+        let store = activityStore
+        Task { [weak self] in
+            let loaded = await Task.detached(priority: .utility) { store.load() }.value
+            guard let self else { return }
+            // A write may have landed before the load finished, so dedupe by id.
+            var seen = Set<UUID>()
+            let merged = (loaded + self.activity).filter { seen.insert($0.id).inserted }
+            self.activity = ActivityLogStore.pruned(merged, now: Date())
+        }
         pollTask = Task { [weak self] in
             await self?.pollLoop()
         }
@@ -66,7 +79,9 @@ final class AppState: ObservableObject {
             let result = await Task.detached(priority: .userInitiated) {
                 ActionRunner.run(action)
             }.value
-            outcome = ActionOutcome.reduce(outcome, .finished(result, at: Date()))
+            let finishedAt = Date()
+            outcome = ActionOutcome.reduce(outcome, .finished(result, at: finishedAt))
+            recordActivity([ActivityEntry.action(for: action, result: result, at: finishedAt)], now: finishedAt)
             if case .success = result {
                 await refresh()
             }
@@ -87,12 +102,27 @@ final class AppState: ObservableObject {
             history = MetricHistory.appending(.from(report: report), to: history)
             historyStore.save(history)
             notifyAboutNewAlertingFindings(in: report.findings)
+            let events = ReportDiff.events(previous: previousReport, current: report, at: startedAt)
+            previousReport = report
+            recordActivity(events, now: startedAt)
         case .failure(let error):
             self.lastError = error
         }
         let now = Date()
         lastUpdated = now
         outcome = ActionOutcome.reduce(outcome, .tick(now: now))
+    }
+
+    /// Writes are chained so two quick appends cannot read the same file and drop one.
+    private func recordActivity(_ entries: [ActivityEntry], now: Date) {
+        guard !entries.isEmpty else { return }
+        activity = ActivityLogStore.pruned(activity + entries, now: now)
+        let store = activityStore
+        let previous = activityWrites
+        activityWrites = Task.detached(priority: .utility) {
+            await previous?.value
+            store.append(entries, now: now)
+        }
     }
 
     /// `lastAlertSeverities` is updated unconditionally, even with

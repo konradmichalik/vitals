@@ -28,6 +28,17 @@ enum ActionRunnerError: Error, Equatable {
     }
 }
 
+extension ActionRunnerError {
+    /// The log is persisted, and the CLI output can carry pids, targets and paths, so it gets fixed text.
+    var activityNote: String {
+        switch self {
+        case .vitalsNotFound: return "Could not find vitals"
+        case .launchFailed: return "Could not launch vitals"
+        case .nonZeroExit: return "Action failed"
+        }
+    }
+}
+
 enum ActionRunner {
     /// Homebrew's two install locations stay ahead of PATH: PATH is
     /// searched as a fallback for non-standard installs, but letting it
