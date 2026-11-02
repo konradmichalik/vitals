@@ -26,7 +26,7 @@ struct HistoryChart: View {
             ForEach(Array(zip(samples, values).enumerated()), id: \.offset) { _, point in
                 LineMark(x: .value("Time", point.0.timestamp), y: .value("Value", point.1))
                     .foregroundStyle(Color.secondary)
-                    .interpolationMethod(.catmullRom)
+                    .interpolationMethod(.monotone)
             }
             if kind == .load {
                 RuleMark(y: .value("Limit", 1.0))
@@ -44,6 +44,8 @@ struct HistoryChart: View {
         .chartXSelection(value: $selectedDate)
         .chartYScale(domain: .automatic(includesZero: kind != .memory))
         .chartYAxis { AxisMarks(position: .leading) }
+        // Fewer ticks keep the last time label from being cut to "..." at the right edge.
+        .chartXAxis { AxisMarks(values: .automatic(desiredCount: 4)) }
         .frame(height: 120)
         .onChange(of: selectedDate) { _, date in
             guard let date else { return }
