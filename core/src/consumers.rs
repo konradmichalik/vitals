@@ -158,7 +158,7 @@ fn claude_group(
 }
 
 fn process_groups(report: &VitalsReport, processes: &[ProcessEntry], now: u64) -> Vec<Consumer> {
-    let mut apps: BTreeMap<String, Consumer> = BTreeMap::new();
+    let mut apps: BTreeMap<String, (Consumer, usize)> = BTreeMap::new();
     let mut plain = Vec::new();
     for p in processes {
         if p.comm.contains("OrbStack.app/")
@@ -172,51 +172,66 @@ fn process_groups(report: &VitalsReport, processes: &[ProcessEntry], now: u64) -
         }
         match bundle_name(&p.comm) {
             Some(name) => {
-                let group = apps.entry(name.to_string()).or_insert_with(|| Consumer {
-                    id: format!("app:{name}"),
-                    kind: ConsumerKind::App,
-                    label: name.to_string(),
-                    detail: None,
-                    cpu_percent: 0.0,
-                    mem_bytes: 0,
-                    children: Vec::new(),
-                    action: None,
-                });
+                let (group, count) = apps
+                    .entry(name.to_string())
+                    .or_insert_with(|| (app_group(name), 0));
                 group.cpu_percent += p.cpu_percent;
                 group.mem_bytes += p.rss_bytes;
+                *count += 1;
             }
-            None => plain.push(Consumer {
-                id: format!("proc:{}", p.pid),
-                kind: ConsumerKind::Process,
-                label: classify::command_label(&p.command),
-                detail: None,
-                cpu_percent: p.cpu_percent,
-                mem_bytes: p.rss_bytes,
-                children: Vec::new(),
-                action: Some(SuggestedAction {
-                    action: "kill_process".to_string(),
-                    target: Some(kill_target(p.pid, now.saturating_sub(p.etime_seconds))),
-                    label: "Quit".to_string(),
-                    estimate: None,
-                }),
-            }),
-        }
-    }
-    let mut counts: BTreeMap<String, usize> = BTreeMap::new();
-    for p in processes {
-        if let Some(name) = bundle_name(&p.comm) {
-            *counts.entry(name.to_string()).or_default() += 1;
+            None => plain.push(plain_group(p, now)),
         }
     }
     let mut groups: Vec<Consumer> = apps
         .into_values()
-        .map(|mut g| {
-            g.detail = Some(format!("{} processes", counts.get(&g.label).unwrap_or(&0)));
-            g
+        .map(|(mut group, count)| {
+            group.detail = Some(format!("{count} processes"));
+            group
         })
         .collect();
     groups.extend(plain);
     groups
+}
+
+fn app_group(name: &str) -> Consumer {
+    Consumer {
+        id: format!("app:{name}"),
+        kind: ConsumerKind::App,
+        label: name.to_string(),
+        detail: None,
+        cpu_percent: 0.0,
+        mem_bytes: 0,
+        children: Vec::new(),
+        action: None,
+    }
+}
+
+fn plain_group(p: &ProcessEntry, now: u64) -> Consumer {
+    Consumer {
+        id: format!("proc:{}", p.pid),
+        kind: ConsumerKind::Process,
+        label: classify::command_label(&p.command),
+        detail: None,
+        cpu_percent: p.cpu_percent,
+        mem_bytes: p.rss_bytes,
+        children: Vec::new(),
+        action: is_killable(p).then(|| SuggestedAction {
+            action: "kill_process".to_string(),
+            target: Some(kill_target(p.pid, now.saturating_sub(p.etime_seconds))),
+            label: "Quit".to_string(),
+            estimate: None,
+        }),
+    }
+}
+
+/// Never offer to kill launchd, system daemons or vitals itself.
+fn is_killable(p: &ProcessEntry) -> bool {
+    const SYSTEM_PREFIXES: [&str; 4] = ["/System/", "/usr/sbin/", "/usr/libexec/", "/sbin/"];
+    p.pid > 1
+        && p.pid != std::process::id()
+        && !SYSTEM_PREFIXES
+            .iter()
+            .any(|prefix| p.comm.starts_with(prefix))
 }
 
 fn orbstack_group(report: &VitalsReport) -> Option<Consumer> {
@@ -482,5 +497,21 @@ mod tests {
         let groups = run(&report(), &processes);
         assert_eq!(groups.len(), 12);
         assert_eq!(groups[0].id, "proc:114");
+    }
+
+    #[test]
+    fn system_process_gets_no_kill_action() {
+        let p = process(500, "/usr/libexec/foo", "foo", GB);
+        let groups = run(&report(), &[p]);
+        assert_eq!(groups[0].kind, ConsumerKind::Process);
+        assert!(groups[0].action.is_none());
+    }
+
+    #[test]
+    fn own_process_gets_no_kill_action() {
+        let p = process(std::process::id(), "/bin/vitals", "vitals", GB);
+        let groups = run(&report(), &[p]);
+        assert_eq!(groups.len(), 1);
+        assert!(groups[0].action.is_none());
     }
 }
