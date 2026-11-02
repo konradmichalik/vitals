@@ -49,7 +49,9 @@ struct PopoverShell: View {
             MenubarView { screen = $0 }
         case .settings:
             PopoverSettingsView()
-        case .detail, .toolchain, .activity:
+        case .detail(let kind):
+            MetricDetailView(kind: kind) { screen = .detail($0) }
+        case .toolchain, .activity:
             Text(screen.title)
                 .font(.callout)
                 .foregroundStyle(.secondary)
