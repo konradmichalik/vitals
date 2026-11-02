@@ -29,6 +29,22 @@ final class ConsumerSortTests: XCTestCase {
         XCTAssertEqual(ConsumerSort.sorted(consumers, by: .memory).map(\.id), ["a", "b"])
     }
 
+    func test_visible_keeps_the_culprit_even_below_the_cut() {
+        let consumers = [
+            consumer("a", cpu: 90, mem: 1), consumer("b", cpu: 80, mem: 1),
+            consumer("c", cpu: 70, mem: 1), consumer("culprit", cpu: 5, mem: 1),
+        ]
+        let rows = ConsumerSort.visible(consumers, by: .cpu, limit: 2, keeping: "culprit")
+        XCTAssertEqual(rows.map(\.id), ["a", "culprit"])
+    }
+
+    func test_visible_leaves_rows_alone_when_the_culprit_is_already_shown_or_unknown() {
+        let consumers = [consumer("a", cpu: 90, mem: 1), consumer("b", cpu: 80, mem: 1), consumer("c", cpu: 70, mem: 1)]
+        XCTAssertEqual(ConsumerSort.visible(consumers, by: .cpu, limit: 2, keeping: "b").map(\.id), ["a", "b"])
+        XCTAssertEqual(ConsumerSort.visible(consumers, by: .cpu, limit: 2, keeping: "gone").map(\.id), ["a", "b"])
+        XCTAssertEqual(ConsumerSort.visible(consumers, by: .cpu, limit: 2, keeping: nil).map(\.id), ["a", "b"])
+    }
+
     func test_default_sort_is_memory_when_verdict_comes_from_memory_pressure() {
         XCTAssertEqual(ConsumerSort.defaultSort(for: [finding("memory_pressure", .warn)]), .memory)
         let mixed = [finding("load_status", .warn), finding("memory_pressure", .critical)]

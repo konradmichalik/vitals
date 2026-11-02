@@ -116,12 +116,13 @@ enum ActionRunner {
 
         do {
             try process.run()
-            process.waitUntilExit()
         } catch {
             return .failure(.launchFailed(error.localizedDescription))
         }
 
+        // Drain before waiting: a child that fills the pipe buffer blocks until someone reads.
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
         let output = String(data: data, encoding: .utf8) ?? ""
 
         if process.terminationStatus == 0 {

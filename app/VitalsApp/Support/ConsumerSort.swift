@@ -26,6 +26,16 @@ enum ConsumerSort: CaseIterable {
             .map(\.element)
     }
 
+    /// The top rows, with the culprit swapped in for the last one if the cut would hide it.
+    static func visible(_ consumers: [Consumer], by sort: ConsumerSort, limit: Int, keeping culpritID: String?) -> [Consumer] {
+        let ordered = sorted(consumers, by: sort)
+        let top = Array(ordered.prefix(limit))
+        guard let culpritID,
+              !top.contains(where: { $0.id == culpritID }),
+              let culprit = ordered.first(where: { $0.id == culpritID }) else { return top }
+        return Array(top.dropLast()) + [culprit]
+    }
+
     static func defaultSort(for findings: [Finding]) -> ConsumerSort {
         findings.verdictFinding?.rule == "memory_pressure" ? .memory : .cpu
     }

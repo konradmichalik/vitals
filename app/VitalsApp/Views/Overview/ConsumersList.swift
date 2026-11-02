@@ -29,7 +29,9 @@ struct ConsumersList: View {
                     .accessibilityLabel("Sort consumers by")
                 }
                 VStack(alignment: .leading, spacing: 0) {
-                    let rows = ConsumerSort.sorted(consumers, by: sortBinding.wrappedValue).prefix(Self.visibleCount)
+                    let rows = ConsumerSort.visible(
+                        consumers, by: sortBinding.wrappedValue, limit: Self.visibleCount, keeping: culpritID
+                    )
                     ForEach(Array(rows.enumerated()), id: \.element.id) { index, consumer in
                         if index > 0 {
                             Divider()

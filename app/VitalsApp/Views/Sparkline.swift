@@ -14,19 +14,9 @@ private extension View {
     }
 }
 
-/// Compact, axis-less recent-trend line — a glance-only companion to the
-/// numeric value next to it, not a standalone chart with its own labels.
-/// Hovering reveals what a point actually means via `tooltip`, rather
-/// than ambient per-point markers: a marker on every sample that's
-/// currently in a sustained state (the common case) reads as visual
-/// noise indistinguishable from an isolated spike, and nothing explains
-/// what it means without already knowing the convention.
-///
-/// The hover indicator is drawn as a plain overlay positioned via
-/// `proxy.position(forX:forY:)`, never as extra marks inside `Chart`
-/// itself — conditionally adding marks there made `.chartYScale`
-/// recompute the plot's domain between hovered/not-hovered, which
-/// visibly shifted the whole line on every hover start/end.
+/// Compact, axis-less trend line next to a numeric value; hovering explains a point through `tooltip`.
+/// The hover indicator is an overlay placed with `proxy.position(forX:forY:)`, not a mark inside `Chart`:
+/// conditional marks made `.chartYScale` recompute its domain and shifted the whole line on every hover.
 struct Sparkline: View {
     let values: [Double]
     let color: Color

@@ -1,9 +1,6 @@
 import Foundation
 
-/// One-line summaries for the parts of the report that drive rules but
-/// had no representation in the UI at all: Time Machine (which one of
-/// only two critical rules reacts to). Kept as pure functions so the
-/// formatting is testable without building a view, matching `TrafficLight`/`LoadStatus`.
+/// Time Machine status line for the Backup tab, a pure function so the formatting is testable without a view.
 enum ServiceSummary {
     /// `locale` is injectable purely so the grouped-thousands formatting
     /// can be asserted against a fixed locale — users still get their own.

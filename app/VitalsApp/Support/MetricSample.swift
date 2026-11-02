@@ -74,7 +74,7 @@ enum MetricHistory {
 
     static func appending(_ sample: MetricSample, to history: [MetricSample]) -> [MetricSample] {
         let updated = history + [sample]
-        return updated.suffix(maxSamples).map { $0 }
+        return Array(updated.suffix(maxSamples))
     }
 
     static func pruning(
