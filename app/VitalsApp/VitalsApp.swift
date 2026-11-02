@@ -5,12 +5,14 @@ struct VitalsApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     var body: some Scene {
-        // The status item and its dropdown are managed directly by
-        // AppDelegate (see its doc comment) rather than via MenuBarExtra
-        // — only the Settings scene still goes through SwiftUI's App
-        // lifecycle.
+        // The status item and popover are managed by AppDelegate. SwiftUI's App
+        // lifecycle still requires one scene, so this one stays empty.
         Settings {
-            SettingsView()
+            EmptyView()
+        }
+        // Without this the empty scene still adds "Settings…" (Cmd+,) and opens a blank window.
+        .commands {
+            CommandGroup(replacing: .appSettings) {}
         }
     }
 }

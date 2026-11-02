@@ -71,6 +71,20 @@ final class AppState: ObservableObject {
         snoozeStore.save(snoozes)
     }
 
+    func unsnooze(rule: String) {
+        snoozes = snoozes.filter { $0.rule != rule }
+        snoozeStore.save(snoozes)
+    }
+
+    private func pruneExpiredSnoozes() {
+        let now = Date()
+        let bootTime = SnoozeStore.currentBootTime()
+        let active = snoozes.filter { SnoozeStore.isActive($0, now: now, bootTime: bootTime) }
+        guard active.count != snoozes.count else { return }
+        snoozes = active
+        snoozeStore.save(active)
+    }
+
     func perform(_ action: SuggestedAction) {
         // `.finished` carries no action identity, so a second run would finish the wrong one.
         if case .running = outcome { return }
@@ -98,6 +112,7 @@ final class AppState: ObservableObject {
         case .success(let report):
             self.report = report
             self.lastError = nil
+            pruneExpiredSnoozes()
             outcome = ActionOutcome.reduce(outcome, .reportArrived(timestamp: startedAt))
             history = MetricHistory.appending(.from(report: report), to: history)
             historyStore.save(history)

@@ -17,7 +17,7 @@ import UserNotifications
 /// while the badge is a real, separate `NSView` layered on top — never
 /// part of the same image, so it's never subject to template masking.
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, UNUserNotificationCenterDelegate {
     @AppStorage(AppNotifier.alertStorageKey) private var notifyOnAlerts = true
 
     let appState = AppState()
@@ -92,7 +92,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
         let popover = NSPopover()
         popover.behavior = .transient
-        popover.contentViewController = NSHostingController(rootView: MenubarView().environmentObject(appState))
+        popover.delegate = self
+        popover.contentViewController = NSHostingController(rootView: PopoverShell().environmentObject(appState))
         self.popover = popover
 
         cancellable = appState.$report.sink { [weak self] report in
@@ -108,6 +109,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
         badgeView?.isHidden = light == .green
         badgeView?.layer?.backgroundColor = NSColor(light.color).cgColor
         statusItem?.button?.toolTip = TrafficLight.tooltip(for: findings)
+    }
+
+    func popoverDidClose(_ notification: Notification) {
+        NotificationCenter.default.post(name: .popoverDidClose, object: nil)
     }
 
     @objc private func toggleDropdown() {

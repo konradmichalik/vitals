@@ -11,61 +11,16 @@ struct MenubarView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            header
-            Divider()
-            content
-            Divider()
-            footer
-        }
-        .frame(width: 380)
-        // NSPopover has no opaque backing of its own — without this the
-        // system's vibrancy blur shows whatever's on the desktop behind
-        // the popover straight through the card tints below, mixing in
-        // unpredictable colors depending on what's underneath.
-        .background(Color(nsColor: .windowBackgroundColor))
-        .alert(item: $pendingAction) { pending in
-            let command = pending.target.map { "\(pending.action) --target \($0)" } ?? pending.action
-            return Alert(
-                title: Text("Run “\(pending.action)”?"),
-                message: Text("This runs `vitals --fix \(command)`."),
-                primaryButton: .destructive(Text("Run")) { runAction(pending.action, target: pending.target) },
-                secondaryButton: .cancel()
-            )
-        }
-    }
-
-    private var header: some View {
-        HStack(spacing: 8) {
-            Image("VitalsIcon")
-                .resizable()
-                .renderingMode(.template)
-                .frame(width: 16, height: 16)
-                .foregroundStyle(.secondary)
-            Text("Vitals")
-                .font(.headline)
-            if let report = appState.report {
-                statusPill(report.findings)
+        content
+            .alert(item: $pendingAction) { pending in
+                let command = pending.target.map { "\(pending.action) --target \($0)" } ?? pending.action
+                return Alert(
+                    title: Text("Run “\(pending.action)”?"),
+                    message: Text("This runs `vitals --fix \(command)`."),
+                    primaryButton: .destructive(Text("Run")) { runAction(pending.action, target: pending.target) },
+                    secondaryButton: .cancel()
+                )
             }
-            Spacer()
-            // MenuBarExtra apps have no app menu of their own, so there's
-            // no automatic Cmd+, path to Settings the way a normal app
-            // gets one for free — SettingsLink is the explicit opener.
-            SettingsLink {
-                Image(systemName: "gearshape")
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(.secondary)
-        }
-        .padding(12)
-    }
-
-    /// Mirrors a plan/status pill next to an app's name (a pattern several
-    /// menu bar apps use) — an at-a-glance summary before you even open
-    /// the sections below.
-    private func statusPill(_ findings: [Finding]) -> some View {
-        let light = TrafficLight.from(findings: findings)
-        return StatusPill(text: TrafficLight.statusLabel(for: findings), color: light.color)
     }
 
     @ViewBuilder
@@ -305,39 +260,6 @@ struct MenubarView: View {
                 }
             }
         }
-    }
-
-    /// Mirrors a common menu bar app footer pattern: refresh + "updated
-    /// Xs/m ago" on the left (so it's clear the data is live, not stale),
-    /// quit on the right.
-    private var footer: some View {
-        HStack {
-            Button {
-                Task { await appState.refresh() }
-            } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: "arrow.clockwise")
-                    if let lastUpdated = appState.lastUpdated {
-                        Text("Updated ").font(.caption) + Text(lastUpdated, style: .relative).font(.caption)
-                    } else {
-                        Text("Updating…").font(.caption)
-                    }
-                }
-                .foregroundStyle(.secondary)
-            }
-            .buttonStyle(.plain)
-
-            Spacer()
-
-            Button {
-                NSApplication.shared.terminate(nil)
-            } label: {
-                Image(systemName: "power")
-            }
-            .buttonStyle(.plain)
-            .help("Quit Vitals")
-        }
-        .padding(12)
     }
 
     private func runAction(_ action: String, target: String? = nil) {

@@ -11,7 +11,7 @@ import UserNotifications
 /// `LaunchAtLogin`'s rationale.
 enum AppNotifier {
     /// Single source of truth for the `@AppStorage` key shared by
-    /// `AppDelegate`, `AppState`, and `SettingsView` — declaring it three
+    /// `AppDelegate`, `AppState`, and `PopoverSettingsView`. Declaring it three
     /// times independently would let a typo in one silently desync it
     /// from the others. Only gates warn/critical finding notifications; a
     /// user-triggered action's own result always notifies regardless,
