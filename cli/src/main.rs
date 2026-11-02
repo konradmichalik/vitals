@@ -168,10 +168,12 @@ fn confirm(action: &Action) -> bool {
     matches!(input.trim().to_lowercase().as_str(), "y" | "yes")
 }
 
-/// `report`/`processes` are only needed by `kill_orphaned_agents`/
-/// `kill_runaway_processes` — callers should skip the (expensive,
-/// DDEV-touching) `collect()` call entirely for every other action rather
-/// than fetch a report that will go unused.
+/// Turns the action name and target into an `Action`, failing early with a
+/// readable message. `report` is only needed by `kill_orphaned_agents`,
+/// `processes` by `kill_runaway_processes` and `kill_process`; every other
+/// action should skip the expensive, DDEV-touching `collect()`. `now` is the
+/// Unix time taken right after the process list, used only by `kill_process`
+/// to verify the target's identity and the kill guard before the prompt.
 fn build_action(
     name: &str,
     target: Option<&str>,
