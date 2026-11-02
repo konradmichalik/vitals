@@ -90,7 +90,8 @@ Every action asks for confirmation unless `actions.require_confirmation = false`
 in `~/.vitals.toml` — there is no bulk "kill all" by design; each fix targets one
 project, PID, or resource at a time. `kill_process` takes `<pid>@<started_at>` (Unix
 seconds, the `startedAt` shown in `vitals --json`) and refuses if that PID no longer
-matches the start time.
+matches the start time, checked again right before the signal. It never stops launchd,
+system processes, Vitals itself or the process that launched it.
 
 > [!TIP]
 > Add `--dry-run` to any `--fix` action to preview what it would do without running it.

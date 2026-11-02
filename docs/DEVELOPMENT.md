@@ -57,7 +57,10 @@ Schema 4 adds `processes.topByMemory` (5 entries, highest `rssBytes` first), per
 `label` (from `classify::command_label`), `rssBytes` and `startedAt` (Unix seconds, now
 minus `ps` elapsed time) on every `TopProcess`, and `ddev.projects` (`name` and `status`
 for every DDEV project, including stopped ones), plus the top-level `consumers` list and
-`verdict` object (see below).
+`verdict` object (see below). `classify::command_label` keeps the program (or the script
+for interpreters) plus at most two long flags matching `--[A-Za-z0-9][A-Za-z0-9-]*`. Every
+other token is dropped, including flags glued to a value by `=`, `:`, `,` or `@`, since argv
+can carry secrets.
 
 ## Rule engine
 
@@ -81,12 +84,14 @@ exact same rule the finding used, rather than trusting a possibly-stale PID list
 
 `core/src/verdict.rs` condenses findings and consumers into the one verdict the menubar
 hero shows: `severity`, `headline`, `detail`, an optional `culprit` and one suggested
-`action`. `derive(report)` runs after `rules::evaluate` (CLI and `vitals-ffi`), so
+`action`. `derive(report, processes, config)` runs after `rules::evaluate` (CLI and `vitals-ffi`), so
 `report::collect` only fills `Verdict::calm()` as a placeholder. Only findings at `warn` or
 above count. The highest severity wins, and on a tie `load_status` beats
-`runaway_processes`, which beats `memory_pressure`. CPU verdicts name the top `Process`
-consumer by CPU, memory verdicts the largest DDEV project (else the largest consumer), and
-the action is that consumer's own action. The TTY report prints headline and detail as its
+`runaway_processes`, which beats `memory_pressure`. A CPU verdict says "is running away" only
+for the busiest process `rules::is_runaway` flags, found through its own `process` consumer.
+Without one, the load verdict names the consumer with the most CPU ("uses the most CPU") and
+the runaway verdict names no culprit. Memory verdicts name the largest DDEV project (else the
+largest consumer), and the action is that consumer's own action. The TTY report prints headline and detail as its
 first line.
 
 ## Consumers
@@ -96,11 +101,14 @@ first line.
 `now` as `top_processes_by`. Every process or container lands in exactly one group:
 `ddevProject` (containers per project), `claudeCli` (sessions), `app` (processes of one app
 bundle), `process` (a single other process) and `orbstackOverhead`. Groups below the minimum CPU
-(1%) and memory thresholds are dropped, the rest are sorted by memory and capped at 12. Processes with `OrbStack.app/` in their command and Claude session PIDs are left out
+(1%) and memory thresholds are dropped, the rest are sorted by memory and capped at 12. Runaway processes are exempt from the cap
+and stay their own `process` group even inside an app bundle (labelled with the executable
+name), so the verdict can always name them. Processes with `OrbStack.app/` in their command and Claude session PIDs are left out
 of the `app` and `process` groups. Each consumer carries `children` and an optional
-`SuggestedAction` (`stop_project`, `kill_process`). `kill_process` is only offered for a PID
-above 1 that is not Vitals itself and whose command does not start with `/System/`,
-`/usr/sbin/`, `/usr/libexec/` or `/sbin/`.
+`SuggestedAction` (`stop_project`, `kill_process`). `kill_process` is only offered where
+`actions::is_killable` allows it: a PID above 1 that is neither Vitals itself nor its parent
+process, and whose command does not start with `/System/`, `/usr/sbin/`, `/usr/libexec/` or
+`/sbin/`.
 
 ## Config
 
@@ -127,12 +135,14 @@ re-reads the process list (`probes::processes::list`) and compares that PID's st
 (`now - etime`) with `started_at`, allowing a 2 second tolerance (`IDENTITY_TOLERANCE_SECONDS`).
 A PID that is gone aborts with "process <pid> is no longer running". A start time that differs
 by more than the tolerance aborts with "process <pid> is no longer the one shown, refresh and
-try again". PID 1 is refused when the target is parsed. There is no bare-PID form.
+try again". `verify_identity` also applies `is_killable` to the process it found, so a protected
+process aborts with "process <pid> cannot be stopped" whoever built the target. PIDs 0 and 1
+are refused when the target is parsed. There is no bare-PID form.
 
-The check runs once, before the interactive y/N prompt (or the menubar app's own dialog,
-which passes `--yes`). `Action::execute` does not repeat it, so a PID that is reused after the
-check but before the signal is not caught. It sends `SIGTERM`, waits 2 seconds and sends
-`SIGKILL` only if the PID is still alive.
+The check runs before the interactive y/N prompt (or the menubar app's own dialog, which
+passes `--yes`) for an early error, and `Action::execute` runs it again on a fresh process
+list right before the signal, so a PID reused while the prompt was open is not killed. It
+then sends `SIGTERM`, waits 2 seconds and sends `SIGKILL` only if the PID is still alive.
 
 `start_project` takes `--target <project-name>` and runs `ddev start <name>` through
 `run_with_timeout` (180 s). It is the counterpart of `stop_project`: the DDEV tab offers
