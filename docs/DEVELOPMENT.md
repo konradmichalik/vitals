@@ -56,7 +56,8 @@ this shape.
 Schema 4 adds `processes.topByMemory` (5 entries, highest `rssBytes` first), per-process
 `label` (from `classify::command_label`), `rssBytes` and `startedAt` (Unix seconds, now
 minus `ps` elapsed time) on every `TopProcess`, and `ddev.projects` (`name` and `status`
-for every DDEV project, including stopped ones).
+for every DDEV project, including stopped ones), plus the top-level `consumers` list and
+`verdict` object (see below).
 
 ## Rule engine
 
@@ -88,6 +89,19 @@ consumer by CPU, memory verdicts the largest DDEV project (else the largest cons
 the action is that consumer's own action. The TTY report prints headline and detail as its
 first line.
 
+## Consumers
+
+`core/src/consumers.rs` builds `VitalsReport.consumers`, the "Top consumers" list.
+`consumers::build(report, processes, config, now)` runs in `report::collect` with the same
+`now` as `top_processes_by`. Every process or container lands in exactly one group:
+`ddevProject` (containers per project), `claudeCli` (sessions), `app` (processes of one app
+bundle), `process` (a single other process) and `orbstackOverhead`. Groups below the minimum CPU
+(1%) and memory thresholds are dropped, the rest are sorted by memory and capped at 12. Processes with `OrbStack.app/` in their command and Claude session PIDs are left out
+of the `app` and `process` groups. Each consumer carries `children` and an optional
+`SuggestedAction` (`stop_project`, `kill_process`). `kill_process` is only offered for a PID
+above 1 that is not Vitals itself and whose command does not start with `/System/`,
+`/usr/sbin/`, `/usr/libexec/` or `/sbin/`.
+
 ## Config
 
 `core/src/config.rs` loads `~/.vitals.toml`. All sections have `#[serde(default)]`, so
@@ -108,13 +122,21 @@ prompts or reads stdin. `vitals --fix <action> --yes` skips the interactive y/N 
 — used by the menubar app after its own native confirmation dialog.
 
 `kill_process` takes `--target <pid>@<started_at>` (Unix seconds, the `startedAt` the report
-shows). Before building the action, the CLI re-reads the process list and compares the
-start time of that PID (`now - etime`) with `started_at`. A missing PID or a difference
-over 2 seconds aborts with "no longer the one shown, refresh and try again", so a reused
-PID is never killed. PID 1 is refused. There is no bare-PID form.
+shows). `build_action` calls `actions::verify_identity` before the action exists: the CLI
+re-reads the process list (`probes::processes::list`) and compares that PID's start time
+(`now - etime`) with `started_at`, allowing a 2 second tolerance (`IDENTITY_TOLERANCE_SECONDS`).
+A PID that is gone aborts with "process <pid> is no longer running". A start time that differs
+by more than the tolerance aborts with "process <pid> is no longer the one shown, refresh and
+try again". PID 1 is refused when the target is parsed. There is no bare-PID form.
+
+The check runs once, before the interactive y/N prompt (or the menubar app's own dialog,
+which passes `--yes`). `Action::execute` does not repeat it, so a PID that is reused after the
+check but before the signal is not caught. It sends `SIGTERM`, waits 2 seconds and sends
+`SIGKILL` only if the PID is still alive.
 
 `start_project` takes `--target <project-name>` and runs `ddev start <name>` through
-`run_with_timeout` (180 s), the "Start again" follow-up to `stop_project`.
+`run_with_timeout` (180 s). It is the counterpart of `stop_project`: the DDEV tab offers
+Start for projects whose status is `stopped` or `paused`, and Stop for `running` ones.
 
 ## Menubar app (app/)
 
@@ -140,6 +162,8 @@ Swift-side structure:
   appends `--yes`); `run()` shells out to the located `vitals` binary via `Process`.
 - `Support/TrafficLight.swift` — `from(findings:)` derives the icon color from the
   highest-severity finding (green when none fire).
+- `Models/Verdict.swift`, `Models/Consumer.swift`: `Codable` mirrors of the core's
+  `verdict` and `consumers` fields.
 
 Every pure function above (`decode`, `pollInterval`, `buildArguments`,
 `locateVitalsBinary`, `TrafficLight.from`, `Severity`'s `Comparable` conformance) has a
@@ -160,6 +184,52 @@ silent by design. `Support/AppNotifier.swift` is the untested `UNUserNotificatio
 pass-through (real side effects, same rationale as `LaunchAtLogin`) and owns the
 `alertStorageKey` `@AppStorage` key; `Support/AppDelegate.swift` owns the permission
 request and delegate registration.
+
+### Navigation
+
+`Views/PopoverScreen.swift` defines the screens the popover shell (`Views/PopoverShell.swift`)
+switches between: `overview`, `detail(MetricKind)` (cpu, memory, load, swap),
+`toolchain(ToolTab)` (ddev, docker, claude, backup), `activity` and `settings`. The header
+icons for activity and settings are toggles (`toggled(_:)`): pressing one on its own screen
+returns to the overview. Views live in `Views/Overview/` (verdict hero, metric tiles,
+toolchain chips, consumers, findings), `Views/Detail/` (metric detail with a `HistoryChart`,
+15m and 1h ranges) and `Views/Toolchain/` (one tab per tool). The `Settings` scene in
+`VitalsApp.swift` is intentionally empty, settings are a popover screen.
+
+### Stores
+
+| Data | Location | Limits |
+| --- | --- | --- |
+| Metric history (`MetricHistoryStore`) | `UserDefaults` key `metricHistory` | up to 360 samples, restored samples older than 1 h are dropped |
+| Snoozes (`SnoozeStore`) | `UserDefaults` key `snoozes` | expired snoozes are pruned on launch and on change |
+| Activity log (`ActivityLogStore`) | `~/Library/Application Support/Vitals/activity.json` | 7 days, at most 500 entries, oldest dropped first |
+| Quiet hours | `UserDefaults` key `quietHours` | fixed window from 19:00 to 08:00 |
+| Menubar value | `UserDefaults` key `menubarValue` | on by default |
+| Alert notifications | `UserDefaults` key `notifyOnAlerts` | on by default |
+
+A snooze is `1 h`, `today` or `until restart`. The last one stores the boot time and
+expires when it changes. A snoozed rule is hidden from the findings list and from
+notifications, while the traffic light and status pill still count it. A corrupt or
+outdated store loads as empty instead of blocking launch.
+
+### Action outcome
+
+`Support/ActionOutcome.swift` tracks one action from click to effect. `reduce(_:_:)` is
+pure, every timestamp comes in as an argument. States: `idle`, `running`, `checking` and
+`failed`. `started` moves to `running`. A successful `finished` moves to `checking`, a failed
+one to `failed` with the runner's message. `checking` returns to `idle` when a report
+timestamped after the action finished arrives, or after `checkingTimeout` (60 s) as a
+fallback if polling stalls. Every finished action is also written to the activity log.
+
+### Notifications and menubar
+
+Finding banners carry two actions (`Support/NotificationResponse.swift`, pure and tested):
+"Show cause" (also the default tap) opens the overview, "Snooze 1 h" snoozes that rule for
+one hour. A notification fires on the transition into warn or critical only, and not at all
+during quiet hours. The menubar item shows a dot badge next to the icon, hidden when green
+and square instead of round when critical (`TrafficLight.badgeCornerRadius`). With
+`menubarValue` on, `MenubarLabel.text` adds a value only while a critical finding exists:
+`CPU <n>%` for `load_status`, `Mem <pressure>` for `memory_pressure`.
 
 ### Code signing without an Apple Developer account
 
