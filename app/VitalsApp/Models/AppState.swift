@@ -11,6 +11,7 @@ final class AppState: ObservableObject {
     @Published private(set) var lastUpdated: Date?
     @Published private(set) var history: [MetricSample] = []
     @Published private(set) var outcome: ActionOutcome = .idle
+    @Published private(set) var snoozes: [Snooze] = []
 
     @AppStorage(AppNotifier.alertStorageKey) private var notifyOnAlerts = true
     private var lastAlertSeverities: [String: Severity] = [:]
@@ -25,9 +26,12 @@ final class AppState: ObservableObject {
     nonisolated static let notificationCooldown: TimeInterval = 15 * 60
 
     private let historyStore = MetricHistoryStore()
+    private let snoozeStore = SnoozeStore()
 
     init() {
         history = historyStore.load()
+        let bootTime = SnoozeStore.currentBootTime()
+        snoozes = snoozeStore.load().filter { SnoozeStore.isActive($0, now: Date(), bootTime: bootTime) }
         pollTask = Task { [weak self] in
             await self?.pollLoop()
         }
@@ -35,6 +39,23 @@ final class AppState: ObservableObject {
 
     deinit {
         pollTask?.cancel()
+    }
+
+    /// The traffic light and status pill keep using all findings, so a snooze never hides the dot.
+    var visibleFindings: [Finding] {
+        let now = Date()
+        let bootTime = SnoozeStore.currentBootTime()
+        return (report?.findings ?? []).filter {
+            !SnoozeStore.isSnoozed(rule: $0.rule, snoozes: snoozes, now: now, bootTime: bootTime)
+        }
+    }
+
+    func snooze(rule: String, for duration: SnoozeDuration) {
+        let entry = SnoozeStore.snooze(
+            rule: rule, for: duration, now: Date(), bootTime: SnoozeStore.currentBootTime(), calendar: .current
+        )
+        snoozes = snoozes.filter { $0.rule != rule } + [entry]
+        snoozeStore.save(snoozes)
     }
 
     func perform(_ action: SuggestedAction) {
@@ -88,7 +109,10 @@ final class AppState: ObservableObject {
 
         guard notifyOnAlerts else { return }
         let now = Date()
+        if UserDefaults.standard.bool(forKey: QuietHours.storageKey), QuietHours.isQuiet(now) { return }
+        let bootTime = SnoozeStore.currentBootTime()
         for rule in newlyAlerting {
+            guard !SnoozeStore.isSnoozed(rule: rule, snoozes: snoozes, now: now, bootTime: bootTime) else { continue }
             guard let finding = findings.first(where: { $0.rule == rule }) else { continue }
             guard FindingAlertTransition.shouldNotify(
                 rule: rule, now: now, lastNotifiedAt: lastNotifiedAt, cooldown: Self.notificationCooldown

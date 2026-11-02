@@ -269,7 +269,16 @@ struct MenubarView: View {
 
     @ViewBuilder
     private func findingsSection(_ report: VitalsReport) -> some View {
-        if report.findings.isEmpty {
+        let visible = appState.visibleFindings
+        if visible.isEmpty && !report.findings.isEmpty {
+            // The pill still reflects snoozed findings, so "normal" here would contradict it.
+            HStack(spacing: 6) {
+                Image(systemName: "bell.slash")
+                Text("All findings snoozed.")
+            }
+            .font(.callout)
+            .foregroundStyle(.secondary)
+        } else if visible.isEmpty {
             HStack(spacing: 6) {
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundStyle(.green)
@@ -285,7 +294,7 @@ struct MenubarView: View {
                 // findings running into each other with only padding
                 // between them.
                 VStack(alignment: .leading, spacing: 0) {
-                    ForEach(Array(report.findings.sortedBySeverity().enumerated()), id: \.element.id) { index, finding in
+                    ForEach(Array(visible.sortedBySeverity().enumerated()), id: \.element.id) { index, finding in
                         if index > 0 {
                             Divider()
                         }
