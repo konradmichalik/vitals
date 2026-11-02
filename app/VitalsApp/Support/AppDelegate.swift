@@ -26,6 +26,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, UNU
     private var badgeView: NSView?
     private var popover: NSPopover?
     private var cancellable: AnyCancellable?
+    private var defaultsObserver: NSObjectProtocol?
+    private var latestReport: VitalsReport?
+    private var badgeLeading: NSLayoutConstraint?
+    // Double optional: the outer nil means "never applied yet".
+    private var shownLabel: String??
+
+    private static let fallbackImageInset: CGFloat = 4
+    private static let badgeDiameter: CGFloat = 6
 
     /// `xcodebuild test` hosts the app in a process that UNUserNotificationCenter
     /// can't resolve a bundle identity for (it crashes with "could not
@@ -61,32 +69,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, UNU
     }
 
     private func setupStatusItem() {
-        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = item.button {
             let icon = NSImage(systemSymbolName: "waveform.path.ecg", accessibilityDescription: "Vitals")
             icon?.isTemplate = true
             button.image = icon
+            button.imagePosition = .imageLeading
+            button.setAccessibilityLabel("Vitals")
             button.action = #selector(toggleDropdown)
             button.target = self
-
-            // A manual frame here read `button.bounds` before the button
-            // had actually laid out to fit the new image, so the badge
-            // landed wherever that premature (near-zero) size implied —
-            // constraints resolve correctly regardless of when AppKit
-            // finishes that layout pass.
-            let diameter: CGFloat = 6
-            let badge = NSView()
-            badge.translatesAutoresizingMaskIntoConstraints = false
-            badge.wantsLayer = true
-            badge.layer?.cornerRadius = diameter / 2
-            button.addSubview(badge)
-            NSLayoutConstraint.activate([
-                badge.widthAnchor.constraint(equalToConstant: diameter),
-                badge.heightAnchor.constraint(equalToConstant: diameter),
-                badge.trailingAnchor.constraint(equalTo: button.trailingAnchor, constant: -1),
-                badge.bottomAnchor.constraint(equalTo: button.bottomAnchor, constant: -1),
-            ])
-            badgeView = badge
+            button.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .medium)
+            installBadge(on: button)
         }
         statusItem = item
 
@@ -97,8 +90,61 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, UNU
         self.popover = popover
 
         cancellable = appState.$report.sink { [weak self] report in
+            self?.latestReport = report
             self?.updateBadge(for: report?.findings ?? [])
+            self?.updateLabel()
         }
+        defaultsObserver = NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated { self?.updateLabel() }
+        }
+    }
+
+    private func installBadge(on button: NSStatusBarButton) {
+        // A manual frame here read `button.bounds` before the button
+        // had actually laid out to fit the new image, so the badge
+        // landed wherever that premature (near-zero) size implied —
+        // constraints resolve correctly regardless of when AppKit
+        // finishes that layout pass.
+        let badge = NSView()
+        badge.translatesAutoresizingMaskIntoConstraints = false
+        badge.wantsLayer = true
+        button.addSubview(badge)
+        // Leading, not trailing: the value label widens the button
+        // on the right, the badge has to stay on the icon.
+        let leading = badge.leadingAnchor.constraint(equalTo: button.leadingAnchor, constant: 0)
+        NSLayoutConstraint.activate([
+            badge.widthAnchor.constraint(equalToConstant: Self.badgeDiameter),
+            badge.heightAnchor.constraint(equalToConstant: Self.badgeDiameter),
+            leading,
+            badge.bottomAnchor.constraint(equalTo: button.bottomAnchor, constant: -1),
+        ])
+        badgeView = badge
+        badgeLeading = leading
+    }
+
+    /// Re-derives the badge offset from the icon's real position, because
+    /// the title changes the button width and the icon's inset with it.
+    private func anchorBadgeToImage(_ button: NSStatusBarButton) {
+        button.layoutSubtreeIfNeeded()
+        let imageMaxX = button.cell?.imageRect(forBounds: button.bounds).maxX ?? 0
+        let fallback = (button.image?.size.width ?? 0) + Self.fallbackImageInset
+        badgeLeading?.constant = (imageMaxX > 0 ? imageMaxX : fallback) - Self.badgeDiameter + 1
+    }
+
+    private func updateLabel() {
+        guard let button = statusItem?.button else { return }
+        let defaults = UserDefaults.standard
+        let enabled = defaults.object(forKey: QuietHours.menubarValueKey) == nil
+            || defaults.bool(forKey: QuietHours.menubarValueKey)
+        let text = latestReport.flatMap { MenubarLabel.text(for: $0, enabled: enabled) }
+        // Defaults change on every history or snooze write, not only for this key.
+        guard text != shownLabel else { return }
+        shownLabel = text
+        button.title = text ?? ""
+        anchorBadgeToImage(button)
+        button.setAccessibilityLabel(text.map { "Vitals, \($0)" } ?? "Vitals")
     }
 
     /// The dot only earns its keep as an interrupt for something worth
@@ -107,6 +153,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, UNU
     private func updateBadge(for findings: [Finding]) {
         let light = TrafficLight.from(findings: findings)
         badgeView?.isHidden = light == .green
+        badgeView?.layer?.cornerRadius = TrafficLight.badgeCornerRadius(for: light, diameter: Self.badgeDiameter)
         badgeView?.layer?.backgroundColor = NSColor(light.color).cgColor
         statusItem?.button?.toolTip = TrafficLight.tooltip(for: findings)
     }

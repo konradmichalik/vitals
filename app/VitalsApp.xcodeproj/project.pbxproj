@@ -19,6 +19,7 @@
 		20FF9EAB5C9323570396D5B6 /* ActionEntryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DE99CE4532F46D2BB2F519B /* ActionEntryTests.swift */; };
 		22E23D6F0B3CC64C2E56FC9C /* AppStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55C780348E2A0DDD27BF8038 /* AppStateTests.swift */; };
 		23A6366D8BAD8F3BE589FF48 /* PopoverScreenTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1EA3B65FB62920C6B775D51 /* PopoverScreenTests.swift */; };
+		299113F5BBA10923A7492D7B /* MenubarLabel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C30DA68D5AA89C508EF7F3F5 /* MenubarLabel.swift */; };
 		2B194708794C7238D75BCDE3 /* ServiceSummaryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FC860273E68D60F0588E221A /* ServiceSummaryTests.swift */; };
 		2CB9CD1ED23274F63646F51D /* HistoryChart.swift in Sources */ = {isa = PBXBuildFile; fileRef = 748EB10A812D9CB9198349A6 /* HistoryChart.swift */; };
 		3408557C14374929535C9F0C /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 1B6F0C818A25216ADD56C541 /* Assets.xcassets */; };
@@ -54,6 +55,7 @@
 		9FB921B13A62F8A7AB27E298 /* ToolchainSummaryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D6CCB2F6A032BB2BA1FC34F2 /* ToolchainSummaryTests.swift */; };
 		A1A96061F4E98E3996C4E332 /* FindingsList.swift in Sources */ = {isa = PBXBuildFile; fileRef = F1B47C114F7A76951B5BA11F /* FindingsList.swift */; };
 		A610DE6D42FC652E663D60E9 /* DdevTab.swift in Sources */ = {isa = PBXBuildFile; fileRef = 046D4DF98BDA30E0E403B30C /* DdevTab.swift */; };
+		A7C3EF529DBE3B07E8640E70 /* MenubarLabelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0534BF732601B464FDB4626C /* MenubarLabelTests.swift */; };
 		A8B75056BB33A490AF247281 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = FCB2D98E1F46D81928FDBFEC /* AppDelegate.swift */; };
 		AA4B613AE802D9818156CB2F /* SectionHeader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98E2637CD2BA3F5589C78DEF /* SectionHeader.swift */; };
 		AB32AD88721AB790610BE73A /* VitalsBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 566229B483107F02FF8B4096 /* VitalsBridge.swift */; };
@@ -103,6 +105,7 @@
 /* Begin PBXFileReference section */
 		006AA157A8EBD12F05CB1C9A /* FindingAlertTransition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FindingAlertTransition.swift; sourceTree = "<group>"; };
 		046D4DF98BDA30E0E403B30C /* DdevTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DdevTab.swift; sourceTree = "<group>"; };
+		0534BF732601B464FDB4626C /* MenubarLabelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenubarLabelTests.swift; sourceTree = "<group>"; };
 		05A64A8063BA354AF5F414A6 /* DockerTab.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DockerTab.swift; sourceTree = "<group>"; };
 		0BF08E912AE9E255A1D67BF7 /* ActionOutcomeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionOutcomeTests.swift; sourceTree = "<group>"; };
 		0FC85A91384288D59A0EB282 /* ReportDiffTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReportDiffTests.swift; sourceTree = "<group>"; };
@@ -163,6 +166,7 @@
 		B5CCE0871B1D9C24F8340D57 /* LoadStatus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoadStatus.swift; sourceTree = "<group>"; };
 		BA047BB90AD2BF29BFB58BF6 /* ToolchainRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ToolchainRow.swift; sourceTree = "<group>"; };
 		C1D4F4F6EF87109558BEFC6F /* ActivityView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActivityView.swift; sourceTree = "<group>"; };
+		C30DA68D5AA89C508EF7F3F5 /* MenubarLabel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MenubarLabel.swift; sourceTree = "<group>"; };
 		C49F095F7E511E95AD528985 /* VitalsApp.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = VitalsApp.entitlements; sourceTree = "<group>"; };
 		C5C098FCEF074EC7901E2DAC /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		C708FD8006450320EEF625E2 /* PopoverShell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PopoverShell.swift; sourceTree = "<group>"; };
@@ -205,6 +209,7 @@
 				006AA157A8EBD12F05CB1C9A /* FindingAlertTransition.swift */,
 				AAD560573ED4211A14D76800 /* LaunchAtLogin.swift */,
 				B5CCE0871B1D9C24F8340D57 /* LoadStatus.swift */,
+				C30DA68D5AA89C508EF7F3F5 /* MenubarLabel.swift */,
 				DFCA98C52002D47C79BE8309 /* MetricHistoryStore.swift */,
 				CACF9CDFCE2BE03DC7FD6F1D /* MetricSample.swift */,
 				1A6A2E632F6D86A27F749F79 /* MetricSeries.swift */,
@@ -236,6 +241,7 @@
 				8BE7254A8587BF143A9D50A7 /* FindingAlertTransitionTests.swift */,
 				E5D365FA57A709BC4D3E6D59 /* FindingTests.swift */,
 				75DB8D816C0B6F41015C9E9F /* LoadStatusTests.swift */,
+				0534BF732601B464FDB4626C /* MenubarLabelTests.swift */,
 				D9354AA79F69AC8C9111FB50 /* MetricHistoryStoreTests.swift */,
 				AE6912BD72FDE28B27513807 /* MetricSampleTests.swift */,
 				148395ED5A2F0096A5C038DF /* MetricSeriesTests.swift */,
@@ -499,6 +505,7 @@
 				2CB9CD1ED23274F63646F51D /* HistoryChart.swift in Sources */,
 				C79937B3ACF6F507267641DF /* LaunchAtLogin.swift in Sources */,
 				C98FDD842A92DC90F49321DC /* LoadStatus.swift in Sources */,
+				299113F5BBA10923A7492D7B /* MenubarLabel.swift in Sources */,
 				5F62DD754678080D18864B3E /* MenubarView.swift in Sources */,
 				C733EEF8324F136FF9B8C9AC /* MetricDetailView.swift in Sources */,
 				C2586DFD0C0585FFA9ACF8D7 /* MetricHistoryStore.swift in Sources */,
@@ -548,6 +555,7 @@
 				5127E030DABFFB276EA4DC71 /* FindingAlertTransitionTests.swift in Sources */,
 				AB69DB2ABD914FECA8A6EF6B /* FindingTests.swift in Sources */,
 				59B3B6D481EEE140ABBD0ECD /* LoadStatusTests.swift in Sources */,
+				A7C3EF529DBE3B07E8640E70 /* MenubarLabelTests.swift in Sources */,
 				8CC65861EB42C0D4FBBE41F7 /* MetricHistoryStoreTests.swift in Sources */,
 				0E5653F0E78687E7EE996F51 /* MetricSampleTests.swift in Sources */,
 				C711E3C3623E8A0C1896869D /* MetricSeriesTests.swift in Sources */,

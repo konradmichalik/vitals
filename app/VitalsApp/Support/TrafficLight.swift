@@ -30,6 +30,12 @@ enum TrafficLight: Equatable {
         }
     }
 
+    /// Critical is square so it reads differently from the round warning
+    /// dot without relying on color alone.
+    static func badgeCornerRadius(for light: TrafficLight, diameter: CGFloat) -> CGFloat {
+        light == .red ? 1.5 : diameter / 2
+    }
+
     /// The badge dot's meaning wasn't explained anywhere — this becomes
     /// the menu bar icon's hover tooltip, so the answer is discoverable
     /// in the UI itself, not just in a chat message.
