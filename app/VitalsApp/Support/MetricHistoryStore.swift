@@ -7,7 +7,7 @@ import Foundation
 /// spike?".
 ///
 /// `UserDefaults` rather than a file in Application Support: the payload
-/// is 30 small structs, it needs no migration story of its own, and it
+/// is at most 360 small structs (about 60 KB), it needs no migration story of its own, and it
 /// keeps the read synchronous enough to happen during `AppState.init`
 /// without a loading state.
 struct MetricHistoryStore {

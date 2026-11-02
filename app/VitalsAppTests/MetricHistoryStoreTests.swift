@@ -11,6 +11,7 @@ final class MetricHistoryStoreTests: XCTestCase {
             cpuUsedPercent: 10,
             memoryUsedPercent: 50,
             memoryPressure: .normal,
+            swapUsedBytes: 0,
             timestamp: reference.addingTimeInterval(-ageSeconds)
         )
     }
@@ -71,6 +72,16 @@ final class MetricHistoryStoreTests: XCTestCase {
     func testLoadReturnsEmptyOnCorruptedData() {
         let defaults = makeDefaults()
         defaults.set(Data("not json".utf8), forKey: MetricHistoryStore.storageKey)
+
+        XCTAssertTrue(MetricHistoryStore(defaults: defaults).load(now: reference).isEmpty)
+    }
+
+    func testDecodingOldSamplesWithoutSwapYieldsEmptyHistory() throws {
+        let defaults = makeDefaults()
+        let encoded = try JSONEncoder().encode([sample(ageSeconds: 60)])
+        var objects = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [[String: Any]])
+        objects[0].removeValue(forKey: "swapUsedBytes")
+        defaults.set(try JSONSerialization.data(withJSONObject: objects), forKey: MetricHistoryStore.storageKey)
 
         XCTAssertTrue(MetricHistoryStore(defaults: defaults).load(now: reference).isEmpty)
     }

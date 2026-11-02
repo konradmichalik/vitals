@@ -6,7 +6,8 @@ final class MetricSampleTests: XCTestCase {
         load1: Double,
         idlePercent: Double,
         memoryUsedPercent: UInt8,
-        pressureLevel: PressureLevel = .normal
+        pressureLevel: PressureLevel = .normal,
+        swapUsedBytes: UInt64 = 0
     ) -> VitalsReport {
         VitalsReport(
             schemaVersion: 1,
@@ -21,7 +22,7 @@ final class MetricSampleTests: XCTestCase {
                     usedPercent: memoryUsedPercent,
                     pageSizeBytes: 16384,
                     compressorBytes: 0,
-                    swapUsedBytes: 0,
+                    swapUsedBytes: swapUsedBytes,
                     pageouts: 0
                 ),
                 cpu: CpuUsage(userPercent: 0, systemPercent: 0, idlePercent: idlePercent)
@@ -42,6 +43,7 @@ final class MetricSampleTests: XCTestCase {
         memoryUsedPercent: Double = 0,
         loadStatus: LoadStatus = .normal,
         memoryPressure: PressureLevel = .normal,
+        swapUsedBytes: UInt64 = 0,
         timestamp: Date = Date(timeIntervalSince1970: 0)
     ) -> MetricSample {
         MetricSample(
@@ -50,6 +52,7 @@ final class MetricSampleTests: XCTestCase {
             cpuUsedPercent: cpuUsedPercent,
             memoryUsedPercent: memoryUsedPercent,
             memoryPressure: memoryPressure,
+            swapUsedBytes: swapUsedBytes,
             timestamp: timestamp
         )
     }
@@ -97,5 +100,34 @@ final class MetricSampleTests: XCTestCase {
         XCTAssertEqual(result.count, MetricHistory.maxSamples)
         XCTAssertEqual(result.last, newest)
         XCTAssertEqual(result.first, existing[1])
+    }
+
+    func testFromReportCarriesSwapUsedBytes() {
+        let extracted = MetricSample.from(
+            report: report(load1: 1, idlePercent: 90, memoryUsedPercent: 50, swapUsedBytes: 2_048)
+        )
+        XCTAssertEqual(extracted.swapUsedBytes, 2_048)
+    }
+
+    func testAppendingCapsAt360() {
+        XCTAssertEqual(MetricHistory.maxSamples, 360)
+        let existing = (0..<360).map { sample(load: Double($0)) }
+        let result = MetricHistory.appending(sample(load: 999), to: existing)
+        XCTAssertEqual(result.count, 360)
+        XCTAssertEqual(result.first?.load, 1)
+        XCTAssertEqual(result.last?.load, 999)
+    }
+
+    func testWindowKeepsOnlySamplesInsideRange() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let history = [1200.0, 600, 60].map { sample(load: $0, timestamp: now.addingTimeInterval(-$0)) }
+        let kept = MetricHistory.window(history, range: .fifteenMinutes, now: now)
+        XCTAssertEqual(kept.map(\.load), [600, 60])
+        XCTAssertEqual(MetricHistory.window(history, range: .oneHour, now: now).count, 3)
+    }
+
+    func testHistoryRangeSecondsAndLabels() {
+        XCTAssertEqual(HistoryRange.allCases.map(\.seconds), [900, 3600])
+        XCTAssertEqual(HistoryRange.allCases.map(\.label), ["15m", "1h"])
     }
 }

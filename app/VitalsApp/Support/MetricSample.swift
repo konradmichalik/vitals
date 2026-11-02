@@ -18,6 +18,7 @@ struct MetricSample: Equatable, Codable {
     /// signal (§7: the real scarcity indicator, not raw percent) rather
     /// than inventing a separate threshold for the sparkline.
     let memoryPressure: PressureLevel
+    let swapUsedBytes: UInt64
     /// When this sample was taken — the sparkline's X axis is hidden
     /// (kept compact, no room for tick labels), so this is what lets the
     /// hover tooltip and the history-span caption say how far back a
@@ -34,16 +35,35 @@ struct MetricSample: Equatable, Codable {
             cpuUsedPercent: 100 - report.system.cpu.idlePercent,
             memoryUsedPercent: Double(report.system.memory.usedPercent),
             memoryPressure: report.system.memory.pressureLevel,
+            swapUsedBytes: report.system.memory.swapUsedBytes,
             timestamp: timestamp
         )
     }
 }
 
+enum HistoryRange: CaseIterable {
+    case fifteenMinutes
+    case oneHour
+
+    var seconds: TimeInterval {
+        switch self {
+        case .fifteenMinutes: return 900
+        case .oneHour: return 3600
+        }
+    }
+
+    var label: String {
+        switch self {
+        case .fifteenMinutes: return "15m"
+        case .oneHour: return "1h"
+        }
+    }
+}
+
 enum MetricHistory {
-    /// Sparklines are meant as an at-a-glance recent trend, not a full
-    /// history — capped so `AppState`'s buffer can't grow unbounded over
-    /// a long-running session.
-    static let maxSamples = 30
+    /// One hour at the 10 s poll interval, capped so `AppState`'s buffer
+    /// can't grow unbounded over a long-running session.
+    static let maxSamples = 360
 
     /// How far back a restored sample may reach. History is persisted so
     /// a restart doesn't wipe the trend, but samples from a run that
@@ -63,5 +83,9 @@ enum MetricHistory {
         now: Date
     ) -> [MetricSample] {
         history.filter { now.timeIntervalSince($0.timestamp) <= maxAge }
+    }
+
+    static func window(_ history: [MetricSample], range: HistoryRange, now: Date) -> [MetricSample] {
+        pruning(history, olderThan: range.seconds, now: now)
     }
 }
