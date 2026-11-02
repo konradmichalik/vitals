@@ -10,6 +10,7 @@ final class AppState: ObservableObject {
     @Published private(set) var lastError: VitalsCollectError?
     @Published private(set) var lastUpdated: Date?
     @Published private(set) var history: [MetricSample] = []
+    @Published private(set) var outcome: ActionOutcome = .idle
 
     @AppStorage(AppNotifier.alertStorageKey) private var notifyOnAlerts = true
     private var lastAlertSeverities: [String: Severity] = [:]
@@ -36,7 +37,23 @@ final class AppState: ObservableObject {
         pollTask?.cancel()
     }
 
+    func perform(_ action: SuggestedAction) {
+        // `.finished` carries no action identity, so a second run would finish the wrong one.
+        if case .running = outcome { return }
+        outcome = ActionOutcome.reduce(outcome, .started(action))
+        Task {
+            let result = await Task.detached(priority: .userInitiated) {
+                ActionRunner.run(action)
+            }.value
+            outcome = ActionOutcome.reduce(outcome, .finished(result, at: Date()))
+            if case .success = result {
+                await refresh()
+            }
+        }
+    }
+
     func refresh() async {
+        let startedAt = Date()
         let result = await Task.detached(priority: .utility) {
             VitalsBridge.collect()
         }.value
@@ -45,13 +62,16 @@ final class AppState: ObservableObject {
         case .success(let report):
             self.report = report
             self.lastError = nil
+            outcome = ActionOutcome.reduce(outcome, .reportArrived(timestamp: startedAt))
             history = MetricHistory.appending(.from(report: report), to: history)
             historyStore.save(history)
             notifyAboutNewAlertingFindings(in: report.findings)
         case .failure(let error):
             self.lastError = error
         }
-        lastUpdated = Date()
+        let now = Date()
+        lastUpdated = now
+        outcome = ActionOutcome.reduce(outcome, .tick(now: now))
     }
 
     /// `lastAlertSeverities` is updated unconditionally, even with
