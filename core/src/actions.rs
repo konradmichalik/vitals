@@ -105,7 +105,8 @@ pub fn parse_process_target(target: &str) -> Result<(u32, u64), String> {
 }
 
 /// Guards against PID reuse: the pid must still exist and have the start
-/// time the caller saw, within `IDENTITY_TOLERANCE_SECONDS`.
+/// time the caller saw, within `IDENTITY_TOLERANCE_SECONDS`. Also applies
+/// `is_killable`, so no caller can target a protected process.
 pub fn verify_identity(
     pid: u32,
     started_at: u64,
@@ -122,7 +123,22 @@ pub fn verify_identity(
             "process {pid} is no longer the one shown, refresh and try again"
         ));
     }
+    if !is_killable(entry) {
+        return Err(format!("process {pid} cannot be stopped"));
+    }
     Ok(())
+}
+
+/// Never kill launchd, system daemons, vitals itself or whatever launched it
+/// (the menubar app or the user's shell).
+pub fn is_killable(p: &ProcessEntry) -> bool {
+    const SYSTEM_PREFIXES: [&str; 4] = ["/System/", "/usr/sbin/", "/usr/libexec/", "/sbin/"];
+    p.pid > 1
+        && p.pid != std::process::id()
+        && p.pid != std::os::unix::process::parent_id()
+        && !SYSTEM_PREFIXES
+            .iter()
+            .any(|prefix| p.comm.starts_with(prefix))
 }
 
 fn join_pids(pids: &[u32]) -> String {
@@ -269,6 +285,49 @@ mod tests {
             verify_identity(48213, 999_000, &processes, 1_000_000),
             Err("process 48213 is no longer running".to_string())
         );
+    }
+
+    fn assert_guarded(pid: u32, comm: &str) {
+        let processes = [ProcessEntry {
+            comm: comm.to_string(),
+            ..entry(pid, 1_000)
+        }];
+        assert_eq!(
+            verify_identity(pid, 999_000, &processes, 1_000_000),
+            Err(format!("process {pid} cannot be stopped"))
+        );
+    }
+
+    #[test]
+    fn guard_refuses_launchd_even_when_identity_matches() {
+        assert_guarded(1, "/sbin/launchd");
+    }
+
+    #[test]
+    fn guard_refuses_own_and_parent_process() {
+        assert_guarded(std::process::id(), "/usr/local/bin/vitals");
+        assert_guarded(std::os::unix::process::parent_id(), "/bin/zsh");
+    }
+
+    #[test]
+    fn guard_refuses_system_paths() {
+        assert_guarded(
+            48213,
+            "/System/Library/CoreServices/loginwindow.app/Contents/MacOS/loginwindow",
+        );
+        assert_guarded(48214, "/usr/sbin/cfprefsd");
+        assert_guarded(48215, "/usr/libexec/trustd");
+        assert_guarded(48216, "/sbin/mount");
+    }
+
+    #[test]
+    fn guard_allows_user_process() {
+        assert!(is_killable(&entry(48213, 1_000)));
+    }
+
+    #[test]
+    fn parse_process_target_rejects_pid_zero() {
+        assert!(parse_process_target("0@5").is_err());
     }
 
     #[test]

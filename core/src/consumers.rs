@@ -5,10 +5,10 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
-use crate::classify;
 use crate::config::Config;
 use crate::probes::processes::ProcessEntry;
 use crate::types::{SuggestedAction, VitalsReport};
+use crate::{actions, classify};
 
 const MIN_MEM_BYTES: u64 = 100 * 1024 * 1024;
 const MIN_CPU_PERCENT: f64 = 1.0;
@@ -215,23 +215,13 @@ fn plain_group(p: &ProcessEntry, now: u64) -> Consumer {
         cpu_percent: p.cpu_percent,
         mem_bytes: p.rss_bytes,
         children: Vec::new(),
-        action: is_killable(p).then(|| SuggestedAction {
+        action: actions::is_killable(p).then(|| SuggestedAction {
             action: "kill_process".to_string(),
             target: Some(kill_target(p.pid, now.saturating_sub(p.etime_seconds))),
             label: "Quit".to_string(),
             estimate: None,
         }),
     }
-}
-
-/// Never offer to kill launchd, system daemons or vitals itself.
-fn is_killable(p: &ProcessEntry) -> bool {
-    const SYSTEM_PREFIXES: [&str; 4] = ["/System/", "/usr/sbin/", "/usr/libexec/", "/sbin/"];
-    p.pid > 1
-        && p.pid != std::process::id()
-        && !SYSTEM_PREFIXES
-            .iter()
-            .any(|prefix| p.comm.starts_with(prefix))
 }
 
 fn orbstack_group(report: &VitalsReport) -> Option<Consumer> {
