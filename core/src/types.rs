@@ -17,6 +17,8 @@ pub struct VitalsReport {
     pub docker: DockerInfo,
     pub processes: ProcessesInfo,
     pub findings: Vec<Finding>,
+    #[serde(default)]
+    pub consumers: Vec<crate::consumers::Consumer>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -205,4 +207,14 @@ pub struct Finding {
     pub severity: Severity,
     pub message: String,
     pub actions: Vec<String>,
+}
+
+/// An action the app can run via `vitals --fix <action> --target <target>`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SuggestedAction {
+    pub action: String,
+    pub target: Option<String>,
+    pub label: String,
+    pub estimate: Option<String>,
 }

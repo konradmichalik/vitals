@@ -406,6 +406,7 @@ mod tests {
             docker: DockerInfo::default(),
             processes: ProcessesInfo::default(),
             findings,
+            consumers: Vec::new(),
         }
     }
 

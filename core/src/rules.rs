@@ -412,6 +412,7 @@ mod tests {
             docker: DockerInfo::default(),
             processes: ProcessesInfo::default(),
             findings: Vec::new(),
+            consumers: Vec::new(),
         }
     }
 

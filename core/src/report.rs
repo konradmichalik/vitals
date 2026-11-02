@@ -5,7 +5,7 @@
 use crate::config::Config;
 use crate::error::VitalsError;
 use crate::probes::processes::ProcessEntry;
-use crate::{classify, probes, types};
+use crate::{classify, consumers, probes, types};
 
 /// Returns the report alongside the raw process table, since `rules`
 /// needs entries (e.g. a `mutagen` process) that never make it into the
@@ -68,7 +68,7 @@ pub fn collect(config: &Config) -> Result<(types::VitalsReport, Vec<ProcessEntry
         top_by_memory: top_processes_by(&process_entries, 5, now, SortKey::Memory),
     };
 
-    let report = types::VitalsReport {
+    let mut report = types::VitalsReport {
         schema_version: types::SCHEMA_VERSION,
         timestamp: timestamp_now()?,
         system,
@@ -77,7 +77,9 @@ pub fn collect(config: &Config) -> Result<(types::VitalsReport, Vec<ProcessEntry
         docker,
         processes,
         findings: Vec::new(),
+        consumers: Vec::new(),
     };
+    report.consumers = consumers::build(&report, &process_entries, config, now);
 
     Ok((report, process_entries))
 }

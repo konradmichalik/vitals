@@ -7,6 +7,7 @@
 pub mod actions;
 pub mod classify;
 pub mod config;
+pub mod consumers;
 pub mod error;
 pub mod probes;
 pub mod report;
