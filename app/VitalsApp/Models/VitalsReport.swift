@@ -12,6 +12,8 @@ struct VitalsReport: Codable {
     let docker: DockerInfo
     let processes: ProcessesInfo
     let findings: [Finding]
+    let consumers: [Consumer]
+    let verdict: Verdict
 }
 
 struct SystemInfo: Codable {
@@ -73,6 +75,12 @@ struct DdevInfo: Codable {
     let problems: [String]
     let pausedCount: UInt32
     let stoppedCount: UInt32
+    let projects: [DdevProjectStatus]
+}
+
+struct DdevProjectStatus: Codable {
+    let name: String
+    let status: String
 }
 
 struct DockerInfo: Codable {
@@ -95,12 +103,16 @@ struct ProcessesInfo: Codable {
     let acpAgents: [AcpAgent]
     let orbstack: OrbstackProcess?
     let topByCpu: [TopProcess]
+    let topByMemory: [TopProcess]
 }
 
 struct TopProcess: Codable, Identifiable {
     let pid: UInt32
     let name: String
+    let label: String
     let cpuPercent: Double
+    let rssBytes: UInt64
+    let startedAt: UInt64
 
     var id: UInt32 { pid }
 }
@@ -213,6 +225,13 @@ extension [Finding] {
             }
             .map(\.element)
     }
+}
+
+struct SuggestedAction: Codable, Hashable {
+    let action: String
+    let target: String?
+    let label: String
+    let estimate: String?
 }
 
 /// The `{"schemaVersion":...,"error":...}` shape `vitals_collect` returns

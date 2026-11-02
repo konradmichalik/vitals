@@ -6,7 +6,7 @@ final class VitalsBridgeTests: XCTestCase {
     // `vitals_collect()` actually returns (see core/src/types.rs).
     private let successJSON = """
     {
-        "schemaVersion": 1,
+        "schemaVersion": 4,
         "timestamp": "2026-08-12T09:52:00Z",
         "system": {
             "uptimeSeconds": 1204140,
@@ -24,15 +24,41 @@ final class VitalsBridgeTests: XCTestCase {
             "cpu": { "userPercent": 22.82, "systemPercent": 22.93, "idlePercent": 54.23 }
         },
         "timeMachine": { "running": false, "phase": null, "changedItemCount": null, "exclusions": [] },
-        "ddev": { "running": [], "problems": [], "pausedCount": 0, "stoppedCount": 0 },
+        "ddev": {
+            "running": ["witte"], "problems": [], "pausedCount": 0, "stoppedCount": 0,
+            "projects": [{ "name": "witte", "status": "running" }]
+        },
         "docker": { "containers": [] },
         "processes": {
             "claudeSessions": [], "acpAgents": [], "orbstack": null,
-            "topByCpu": [{ "pid": 4242, "name": "node", "cpuPercent": 91.2 }]
+            "topByCpu": [{
+                "pid": 4242, "name": "node", "label": "node", "cpuPercent": 91.2,
+                "rssBytes": 1048576, "startedAt": 1786528000
+            }],
+            "topByMemory": [{
+                "pid": 4243, "name": "java", "label": "java", "cpuPercent": 1.5,
+                "rssBytes": 2147483648, "startedAt": 1786520000
+            }]
         },
         "findings": [
             { "rule": "uptime_ballast", "severity": "info", "message": "ballast", "actions": [] }
-        ]
+        ],
+        "consumers": [{
+            "id": "ddev:witte", "kind": "ddevProject", "label": "witte", "detail": "4 containers",
+            "cpuPercent": 12.5, "memBytes": 3221225472,
+            "children": [{
+                "label": "web", "detail": null, "cpuPercent": 10.0, "memBytes": 1073741824,
+                "action": null
+            }],
+            "action": { "action": "stop_project", "target": "witte", "label": "Stop witte", "estimate": "about 3 GB" }
+        }],
+        "verdict": {
+            "severity": "warn",
+            "headline": "Memory is tight",
+            "detail": "Swap is growing.",
+            "culprit": { "id": "ddev:witte", "label": "witte", "reason": "uses 3 GB" },
+            "action": { "action": "stop_project", "target": "witte", "label": "Stop witte", "estimate": null }
+        }
     }
     """
 
@@ -45,10 +71,25 @@ final class VitalsBridgeTests: XCTestCase {
         guard case .success(let report) = result else {
             return XCTFail("expected success, got \(result)")
         }
-        XCTAssertEqual(report.schemaVersion, 1)
+        XCTAssertEqual(report.schemaVersion, 4)
         XCTAssertEqual(report.system.load.m1, 7.40)
         XCTAssertEqual(report.findings.first?.rule, "uptime_ballast")
         XCTAssertEqual(report.processes.topByCpu.first?.name, "node")
+    }
+
+    func testDecodesSchema4VerdictAndConsumers() {
+        guard case .success(let report) = VitalsBridge.decode(successJSON) else {
+            return XCTFail("expected success")
+        }
+        XCTAssertEqual(report.verdict.headline, "Memory is tight")
+        XCTAssertEqual(report.verdict.severity, .warn)
+        XCTAssertEqual(report.verdict.culprit?.id, "ddev:witte")
+        XCTAssertEqual(report.verdict.action?.target, "witte")
+        XCTAssertEqual(report.consumers.first?.kind, .ddevProject)
+        XCTAssertEqual(report.consumers.first?.children.first?.label, "web")
+        XCTAssertEqual(report.consumers.first?.action?.estimate, "about 3 GB")
+        XCTAssertEqual(report.processes.topByMemory.first?.rssBytes, 2_147_483_648)
+        XCTAssertEqual(report.ddev.projects.first?.status, "running")
     }
 
     func testDecodesAReportedErrorEnvelope() {
