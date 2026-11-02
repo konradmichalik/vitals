@@ -59,6 +59,12 @@ pub(crate) fn basename(token: &str) -> &str {
     token.rsplit('/').next().unwrap_or(token)
 }
 
+/// Allowlist, since any separator (`=`, `:`, `,`, `@`) can glue a secret to the flag.
+fn is_plain_flag(flag: &str) -> bool {
+    flag.starts_with(|c: char| c.is_ascii_alphanumeric())
+        && flag.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+}
+
 /// Short display label for a process: program (or script for interpreters)
 /// plus up to two bare long flags. Argument values never appear, since argv
 /// can carry secrets.
@@ -83,7 +89,7 @@ pub fn command_label(command: &str) -> String {
     }
     let flags = rest
         .into_iter()
-        .filter(|token| token.starts_with("--") && !token.contains(['=', '/']))
+        .filter(|token| token.strip_prefix("--").is_some_and(is_plain_flag))
         .take(2);
     std::iter::once(name)
         .chain(flags)
@@ -225,6 +231,28 @@ mod tests {
             ),
             "mysql --batch"
         );
+    }
+
+    #[test]
+    fn command_label_drops_flags_outside_the_allowlist() {
+        assert_eq!(
+            command_label("/bin/tool --token:abc --key,secret --auth@x -- --flag=value"),
+            "tool"
+        );
+    }
+
+    #[test]
+    fn command_label_keeps_plain_long_flags() {
+        assert_eq!(
+            command_label("/bin/tool --verbose --watch"),
+            "tool --verbose --watch"
+        );
+        assert_eq!(command_label("/bin/tool --dry-run2"), "tool --dry-run2");
+    }
+
+    #[test]
+    fn command_label_of_empty_command_is_empty() {
+        assert_eq!(command_label(""), "");
     }
 
     #[test]
