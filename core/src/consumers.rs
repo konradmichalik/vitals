@@ -8,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use crate::config::Config;
 use crate::probes::processes::ProcessEntry;
 use crate::types::{SuggestedAction, VitalsReport};
-use crate::{actions, classify};
+use crate::{actions, classify, rules};
 
 const MIN_MEM_BYTES: u64 = 100 * 1024 * 1024;
 const MIN_CPU_PERCENT: f64 = 1.0;
@@ -65,15 +65,31 @@ fn build_with_home(
     now: u64,
     home: Option<&str>,
 ) -> Vec<Consumer> {
+    let runaway: Vec<u32> = processes
+        .iter()
+        .filter(|p| rules::is_runaway(p, config))
+        .map(|p| p.pid)
+        .collect();
     let mut groups = ddev_groups(report);
     groups.extend(claude_group(report, config, now, home));
-    groups.extend(process_groups(report, processes, now));
+    groups.extend(process_groups(report, processes, now, &runaway));
     groups.extend(orbstack_group(report));
 
     groups.retain(|g| g.cpu_percent >= MIN_CPU_PERCENT || g.mem_bytes >= MIN_MEM_BYTES);
     groups.sort_by(|a, b| b.mem_bytes.cmp(&a.mem_bytes));
-    groups.truncate(MAX_GROUPS);
+    // The verdict names runaways as culprits, so the memory cap must not drop them.
+    let overflow = groups.split_off(MAX_GROUPS.min(groups.len()));
+    groups.extend(
+        overflow
+            .into_iter()
+            .filter(|g| runaway.iter().any(|&pid| g.id == process_id(pid))),
+    );
     groups
+}
+
+/// Consumer id of a plain process, also how the verdict finds a runaway.
+pub(crate) fn process_id(pid: u32) -> String {
+    format!("proc:{pid}")
 }
 
 fn ddev_groups(report: &VitalsReport) -> Vec<Consumer> {
@@ -157,7 +173,14 @@ fn claude_group(
     })
 }
 
-fn process_groups(report: &VitalsReport, processes: &[ProcessEntry], now: u64) -> Vec<Consumer> {
+/// A runaway stays its own `Process` row even inside an app bundle, so the
+/// verdict can name and quit the helper instead of the whole app.
+fn process_groups(
+    report: &VitalsReport,
+    processes: &[ProcessEntry],
+    now: u64,
+    runaway: &[u32],
+) -> Vec<Consumer> {
     let mut apps: BTreeMap<String, (Consumer, usize)> = BTreeMap::new();
     let mut plain = Vec::new();
     for p in processes {
@@ -170,7 +193,7 @@ fn process_groups(report: &VitalsReport, processes: &[ProcessEntry], now: u64) -
         {
             continue;
         }
-        match bundle_name(&p.comm) {
+        match bundle_name(&p.comm).filter(|_| !runaway.contains(&p.pid)) {
             Some(name) => {
                 let (group, count) = apps
                     .entry(name.to_string())
@@ -208,9 +231,13 @@ fn app_group(name: &str) -> Consumer {
 
 fn plain_group(p: &ProcessEntry, now: u64) -> Consumer {
     Consumer {
-        id: format!("proc:{}", p.pid),
+        id: process_id(p.pid),
         kind: ConsumerKind::Process,
-        label: classify::command_label(&p.command),
+        // argv of a bundle executable starts with a path that contains spaces.
+        label: match bundle_name(&p.comm) {
+            Some(_) => classify::basename(&p.comm).to_string(),
+            None => classify::command_label(&p.command),
+        },
         detail: None,
         cpu_percent: p.cpu_percent,
         mem_bytes: p.rss_bytes,
@@ -488,6 +515,48 @@ mod tests {
         let groups = run(&report(), &processes);
         assert_eq!(groups.len(), 12);
         assert_eq!(groups[0].id, "proc:114");
+    }
+
+    /// Above the default 700% threshold for longer than 20 minutes.
+    fn runaway(pid: u32, comm: &str, command: &str) -> ProcessEntry {
+        ProcessEntry {
+            etime_seconds: 21 * 60,
+            cpu_percent: 750.0,
+            ..process(pid, comm, command, 60 * 1024 * 1024)
+        }
+    }
+
+    #[test]
+    fn low_memory_runaway_survives_the_cap() {
+        let mut processes: Vec<ProcessEntry> = (0..12)
+            .map(|i| process(100 + i, "/bin/x", "x", (i as u64 + 1) * GB))
+            .collect();
+        processes.push(runaway(900, "/usr/local/bin/node", "node spin.js"));
+        let groups = run(&report(), &processes);
+        assert_eq!(groups.len(), 13);
+        assert_eq!(groups[12].id, "proc:900");
+    }
+
+    #[test]
+    fn runaway_inside_an_app_bundle_is_its_own_process() {
+        let helper = "/Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Helper \
+                      (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)";
+        let processes = vec![
+            process(
+                10,
+                "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+                "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+                2 * GB,
+            ),
+            runaway(11, helper, &format!("{helper} --type=renderer")),
+        ];
+        let groups = run(&report(), &processes);
+        let app = groups.iter().find(|g| g.id == "app:Google Chrome").unwrap();
+        assert_eq!(app.detail.as_deref(), Some("1 processes"));
+        let proc = groups.iter().find(|g| g.id == "proc:11").unwrap();
+        assert_eq!(proc.kind, ConsumerKind::Process);
+        assert_eq!(proc.label, "Google Chrome Helper (Renderer)");
+        assert_eq!(proc.action.as_ref().unwrap().action, "kill_process");
     }
 
     #[test]

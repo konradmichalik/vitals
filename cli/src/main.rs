@@ -66,7 +66,7 @@ fn main() -> ExitCode {
     match vitals_core::report::collect(&config) {
         Ok((mut report, processes)) => {
             report.findings = vitals_core::rules::evaluate(&report, &processes, &config);
-            report.verdict = vitals_core::verdict::derive(&report);
+            report.verdict = vitals_core::verdict::derive(&report, &processes, &config);
             if cli.json {
                 println!(
                     "{}",

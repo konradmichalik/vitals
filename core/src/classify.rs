@@ -55,7 +55,7 @@ pub fn acp_agents(processes: &[ProcessEntry], retired_versions: &[String]) -> Ve
 const INTERPRETERS: [&str; 7] = ["node", "bun", "deno", "php", "python", "python3", "ruby"];
 const SCRIPT_EXTENSIONS: [&str; 7] = [".js", ".mjs", ".cjs", ".ts", ".php", ".py", ".rb"];
 
-fn basename(token: &str) -> &str {
+pub(crate) fn basename(token: &str) -> &str {
     token.rsplit('/').next().unwrap_or(token)
 }
 
