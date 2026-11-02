@@ -2,7 +2,7 @@ use std::io::{IsTerminal, Write};
 use std::process::ExitCode;
 
 use clap::Parser;
-use vitals_core::actions::Action;
+use vitals_core::actions::{parse_process_target, verify_identity, Action};
 use vitals_core::config::Config;
 use vitals_core::probes::processes::ProcessEntry;
 use vitals_core::types::{Finding, Severity, VitalsReport};
@@ -21,11 +21,11 @@ struct Cli {
 
     /// Apply a remediation action: poweroff, stop_project, stop_backup,
     /// add_exclusions, kill_orphaned_agents, kill_runaway_processes,
-    /// kill_session, prune_docker_images
+    /// kill_process, prune_docker_images
     #[arg(long, value_name = "ACTION")]
     fix: Option<String>,
 
-    /// Target for actions that need one (a DDEV project name or a PID)
+    /// Target for actions that need one (a DDEV project name, or `<pid>@<started_at>` for kill_process)
     #[arg(long, value_name = "VALUE")]
     target: Option<String>,
 
@@ -94,16 +94,26 @@ fn run_fix(
 ) -> ExitCode {
     let needs_process_snapshot =
         action_name == "kill_orphaned_agents" || action_name == "kill_runaway_processes";
-    let (report, processes) = if needs_process_snapshot {
+    let (report, processes, now) = if action_name == "kill_process" {
+        // A bare process list is enough here, and `now` must sit right next to
+        // it: a full collect can take seconds and would skew the identity check.
+        match vitals_core::probes::processes::list() {
+            Ok(processes) => (None, Some(processes), vitals_core::report::unix_now()),
+            Err(err) => {
+                report_error(&err, json, use_color);
+                return ExitCode::FAILURE;
+            }
+        }
+    } else if needs_process_snapshot {
         match vitals_core::report::collect(config) {
-            Ok((report, processes)) => (Some(report), Some(processes)),
+            Ok((report, processes)) => (Some(report), Some(processes), 0),
             Err(err) => {
                 report_error(&err, json, use_color);
                 return ExitCode::FAILURE;
             }
         }
     } else {
-        (None, None)
+        (None, None, 0)
     };
 
     let action = match build_action(
@@ -112,6 +122,7 @@ fn run_fix(
         report.as_ref(),
         processes.as_deref(),
         config,
+        now,
     ) {
         Ok(action) => action,
         Err(message) => {
@@ -166,6 +177,7 @@ fn build_action(
     report: Option<&VitalsReport>,
     processes: Option<&[ProcessEntry]>,
     config: &Config,
+    now: u64,
 ) -> Result<Action, String> {
     match name {
         "poweroff" => Ok(Action::Poweroff),
@@ -212,12 +224,13 @@ fn build_action(
             let name = target.ok_or("`stop_project` requires --target <project-name>")?;
             Ok(Action::StopProject(name.to_string()))
         }
-        "kill_session" => {
-            let pid = target.ok_or("`kill_session` requires --target <pid>")?;
-            let pid: u32 = pid
-                .parse()
-                .map_err(|_| format!("`{pid}` is not a valid PID"))?;
-            Ok(Action::KillSession(pid))
+        "kill_process" => {
+            let target = target.ok_or("`kill_process` requires --target <pid>@<started_at>")?;
+            let processes =
+                processes.ok_or("internal error: no process list collected for kill_process")?;
+            let (pid, started_at) = parse_process_target(target)?;
+            verify_identity(pid, started_at, processes, now)?;
+            Ok(Action::KillProcess { pid, started_at })
         }
         "prune_docker_images" => Ok(Action::PruneDockerImages),
         other => Err(format!(
@@ -507,7 +520,7 @@ mod tests {
     fn build_action_poweroff_needs_no_target_or_report() {
         let config = Config::default();
         assert_eq!(
-            build_action("poweroff", None, None, None, &config).unwrap(),
+            build_action("poweroff", None, None, None, &config, 0).unwrap(),
             Action::Poweroff
         );
     }
@@ -516,7 +529,7 @@ mod tests {
     fn build_action_stop_backup_needs_no_target_or_report() {
         let config = Config::default();
         assert_eq!(
-            build_action("stop_backup", None, None, None, &config).unwrap(),
+            build_action("stop_backup", None, None, None, &config, 0).unwrap(),
             Action::StopBackup
         );
     }
@@ -526,7 +539,7 @@ mod tests {
         let mut config = Config::default();
         config.watch.timemachine_exclusions = vec!["~/.orbstack".to_string()];
         assert_eq!(
-            build_action("add_exclusions", None, None, None, &config).unwrap(),
+            build_action("add_exclusions", None, None, None, &config, 0).unwrap(),
             Action::AddExclusions(vec!["~/.orbstack".to_string()])
         );
     }
@@ -534,7 +547,7 @@ mod tests {
     #[test]
     fn build_action_add_exclusions_errors_when_none_configured() {
         let config = Config::default();
-        assert!(build_action("add_exclusions", None, None, None, &config).is_err());
+        assert!(build_action("add_exclusions", None, None, None, &config, 0).is_err());
     }
 
     #[test]
@@ -556,7 +569,15 @@ mod tests {
         ];
         let config = Config::default();
         assert_eq!(
-            build_action("kill_orphaned_agents", None, Some(&report), None, &config).unwrap(),
+            build_action(
+                "kill_orphaned_agents",
+                None,
+                Some(&report),
+                None,
+                &config,
+                0
+            )
+            .unwrap(),
             Action::KillOrphanedAgents(vec![1])
         );
     }
@@ -565,13 +586,21 @@ mod tests {
     fn build_action_kill_orphaned_agents_errors_when_none_found() {
         let report = sample_report(Vec::new());
         let config = Config::default();
-        assert!(build_action("kill_orphaned_agents", None, Some(&report), None, &config).is_err());
+        assert!(build_action(
+            "kill_orphaned_agents",
+            None,
+            Some(&report),
+            None,
+            &config,
+            0
+        )
+        .is_err());
     }
 
     #[test]
     fn build_action_kill_orphaned_agents_errors_without_a_report() {
         let config = Config::default();
-        assert!(build_action("kill_orphaned_agents", None, None, None, &config).is_err());
+        assert!(build_action("kill_orphaned_agents", None, None, None, &config, 0).is_err());
     }
 
     fn sample_process(pid: u32, cpu_percent: f64, etime_seconds: u64) -> ProcessEntry {
@@ -599,7 +628,8 @@ mod tests {
                 None,
                 None,
                 Some(&processes),
-                &config
+                &config,
+                0
             )
             .unwrap(),
             Action::KillRunawayProcesses(vec![4242])
@@ -615,7 +645,8 @@ mod tests {
             None,
             None,
             Some(&processes),
-            &config
+            &config,
+            0
         )
         .is_err());
     }
@@ -623,40 +654,82 @@ mod tests {
     #[test]
     fn build_action_kill_runaway_processes_errors_without_a_process_list() {
         let config = Config::default();
-        assert!(build_action("kill_runaway_processes", None, None, None, &config).is_err());
+        assert!(build_action("kill_runaway_processes", None, None, None, &config, 0).is_err());
     }
 
     #[test]
     fn build_action_stop_project_requires_target() {
         let config = Config::default();
-        assert!(build_action("stop_project", None, None, None, &config).is_err());
+        assert!(build_action("stop_project", None, None, None, &config, 0).is_err());
         assert_eq!(
-            build_action("stop_project", Some("witte"), None, None, &config).unwrap(),
+            build_action("stop_project", Some("witte"), None, None, &config, 0).unwrap(),
             Action::StopProject("witte".to_string())
         );
     }
 
     #[test]
-    fn build_action_kill_session_parses_pid() {
+    fn build_action_kill_process_requires_target() {
         let config = Config::default();
-        assert!(build_action("kill_session", Some("not-a-pid"), None, None, &config).is_err());
+        assert!(build_action("kill_process", None, None, Some(&[]), &config, 0).is_err());
+        assert!(build_action("kill_process", Some("90548"), None, Some(&[]), &config, 0).is_err());
+    }
+
+    #[test]
+    fn build_action_kill_process_verifies_identity() {
+        let config = Config::default();
+        let processes = [ProcessEntry {
+            pid: 90548,
+            ppid: 1,
+            etime_seconds: 600,
+            cpu_percent: 0.0,
+            rss_bytes: 0,
+            comm: "node".to_string(),
+            command: "node".to_string(),
+        }];
         assert_eq!(
-            build_action("kill_session", Some("90548"), None, None, &config).unwrap(),
-            Action::KillSession(90548)
+            build_action(
+                "kill_process",
+                Some("90548@999400"),
+                None,
+                Some(&processes),
+                &config,
+                1_000_000
+            )
+            .unwrap(),
+            Action::KillProcess {
+                pid: 90548,
+                started_at: 999_400
+            }
         );
+        assert!(build_action(
+            "kill_process",
+            Some("90548@999000"),
+            None,
+            Some(&processes),
+            &config,
+            1_000_000
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn build_action_kill_session_is_unknown() {
+        let config = Config::default();
+        let err = build_action("kill_session", Some("90548"), None, None, &config, 0).unwrap_err();
+        assert!(err.contains("unknown action"));
     }
 
     #[test]
     fn build_action_rejects_unknown_action() {
         let config = Config::default();
-        assert!(build_action("launch_the_missiles", None, None, None, &config).is_err());
+        assert!(build_action("launch_the_missiles", None, None, None, &config, 0).is_err());
     }
 
     #[test]
     fn build_action_prune_docker_images_needs_no_target_or_report() {
         let config = Config::default();
         assert_eq!(
-            build_action("prune_docker_images", None, None, None, &config).unwrap(),
+            build_action("prune_docker_images", None, None, None, &config, 0).unwrap(),
             Action::PruneDockerImages
         );
     }

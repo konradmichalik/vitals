@@ -95,6 +95,12 @@ The CLI (`cli/src/main.rs`) owns confirmation and `--target` parsing; `core` nev
 prompts or reads stdin. `vitals --fix <action> --yes` skips the interactive y/N prompt
 — used by the menubar app after its own native confirmation dialog.
 
+`kill_process` takes `--target <pid>@<started_at>` (Unix seconds, the `startedAt` the report
+shows). Before building the action, the CLI re-reads the process list and compares the
+start time of that PID (`now - etime`) with `started_at`. A missing PID or a difference
+over 2 seconds aborts with "no longer the one shown, refresh and try again", so a reused
+PID is never killed. PID 1 is refused. There is no bare-PID form.
+
 ## Menubar app (app/)
 
 `app/vitals-ffi/src/lib.rs` exposes exactly two `#[no_mangle] extern "C"` functions:

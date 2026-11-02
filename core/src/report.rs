@@ -10,6 +10,10 @@ use crate::{classify, consumers, probes, types};
 /// Returns the report alongside the raw process table, since `rules`
 /// needs entries (e.g. a `mutagen` process) that never make it into the
 /// curated §6 JSON contract.
+pub fn unix_now() -> u64 {
+    time::OffsetDateTime::now_utc().unix_timestamp().max(0) as u64
+}
+
 pub fn collect(config: &Config) -> Result<(types::VitalsReport, Vec<ProcessEntry>), VitalsError> {
     let uptime_seconds = probes::uptime::seconds()?;
     let load = probes::load::read()?;
@@ -59,7 +63,7 @@ pub fn collect(config: &Config) -> Result<(types::VitalsReport, Vec<ProcessEntry
     };
 
     let process_entries = probes::processes::list()?;
-    let now = time::OffsetDateTime::now_utc().unix_timestamp().max(0) as u64;
+    let now = unix_now();
     let processes = types::ProcessesInfo {
         claude_sessions: claude_sessions(&process_entries),
         acp_agents: classify::acp_agents(&process_entries, &config.ide.retired_versions),
