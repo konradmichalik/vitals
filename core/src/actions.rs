@@ -5,6 +5,7 @@
 use crate::error::VitalsError;
 use crate::probes::processes::ProcessEntry;
 use crate::probes::shell;
+use crate::{probes, report};
 use std::time::Duration;
 
 /// Every name `vitals --fix <name>` accepts — the single source of truth
@@ -31,8 +32,8 @@ pub enum Action {
     AddExclusions(Vec<String>),
     KillOrphanedAgents(Vec<u32>),
     KillRunawayProcesses(Vec<u32>),
-    /// `started_at` is the identity check input only, `verify_identity` runs
-    /// before this is built, so `execute` signals the pid as is.
+    /// `verify_identity` runs once before this is built (early error before
+    /// the prompt) and again inside `execute`, right before the signal.
     KillProcess {
         pid: u32,
         started_at: u64,
@@ -82,7 +83,13 @@ impl Action {
             Action::KillRunawayProcesses(pids) => pids
                 .iter()
                 .try_for_each(|&pid| terminate_with_escalation(pid)),
-            Action::KillProcess { pid, .. } => terminate_with_escalation(*pid),
+            Action::KillProcess { pid, started_at } => kill_verified(
+                *pid,
+                *started_at,
+                probes::processes::list,
+                report::unix_now,
+                terminate_with_escalation,
+            ),
             Action::PruneDockerImages => shell::run("docker", &["image", "prune", "-f"]).map(drop),
         }
     }
@@ -127,6 +134,20 @@ pub fn verify_identity(
         return Err(format!("process {pid} cannot be stopped"));
     }
     Ok(())
+}
+
+/// The y/N prompt can stay open long enough for the pid to be reused, so the
+/// identity check runs again right before the signal.
+fn kill_verified(
+    pid: u32,
+    started_at: u64,
+    list: impl FnOnce() -> Result<Vec<ProcessEntry>, VitalsError>,
+    now: impl FnOnce() -> u64,
+    kill: impl FnOnce(u32) -> Result<(), VitalsError>,
+) -> Result<(), VitalsError> {
+    let processes = list()?;
+    verify_identity(pid, started_at, &processes, now()).map_err(VitalsError::Refused)?;
+    kill(pid)
 }
 
 /// Never kill launchd, system daemons, vitals itself or whatever launched it
@@ -323,6 +344,48 @@ mod tests {
     #[test]
     fn guard_allows_user_process() {
         assert!(is_killable(&entry(48213, 1_000)));
+    }
+
+    fn run_kill(processes: Vec<ProcessEntry>) -> (Result<(), String>, Vec<u32>) {
+        let mut killed = Vec::new();
+        let result = kill_verified(
+            48213,
+            999_400,
+            || Ok(processes),
+            || 1_000_000,
+            |pid| {
+                killed.push(pid);
+                Ok(())
+            },
+        );
+        (result.map_err(|err| err.to_string()), killed)
+    }
+
+    #[test]
+    fn execute_reverifies_and_skips_a_reused_pid() {
+        let (result, killed) = run_kill(vec![entry(48213, 5)]);
+        assert_eq!(
+            result,
+            Err("process 48213 is no longer the one shown, refresh and try again".to_string())
+        );
+        assert!(killed.is_empty());
+    }
+
+    #[test]
+    fn execute_skips_a_pid_that_exited_meanwhile() {
+        let (result, killed) = run_kill(Vec::new());
+        assert_eq!(
+            result,
+            Err("process 48213 is no longer running".to_string())
+        );
+        assert!(killed.is_empty());
+    }
+
+    #[test]
+    fn execute_signals_when_identity_still_matches() {
+        let (result, killed) = run_kill(vec![entry(48213, 600)]);
+        assert_eq!(result, Ok(()));
+        assert_eq!(killed, vec![48213]);
     }
 
     #[test]
