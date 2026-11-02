@@ -309,14 +309,30 @@ fn orphaned_acp_agents(report: &VitalsReport, config: &Config) -> Option<Finding
         .collect();
 
     if !orphaned.is_empty() {
+        let above_count =
+            report.processes.acp_agents.len() > config.thresholds.acp_agent_warn_count;
+        let (severity, message) = if above_count {
+            (
+                Severity::Warn,
+                format!(
+                    "{} orphaned PhpStorm ACP agent(s) ({})",
+                    orphaned.len(),
+                    orphaned.join(", ")
+                ),
+            )
+        } else {
+            (
+                Severity::Info,
+                format!(
+                    "{} orphaned PhpStorm ACP agent(s) without an IDE window",
+                    orphaned.len()
+                ),
+            )
+        };
         return Some(Finding {
             rule: "orphaned_acp_agents".to_string(),
-            severity: Severity::Warn,
-            message: format!(
-                "{} orphaned PhpStorm ACP agent(s) ({})",
-                orphaned.len(),
-                orphaned.join(", ")
-            ),
+            severity,
+            message,
             actions: vec!["kill_orphaned_agents".to_string()],
         });
     }
@@ -650,12 +666,14 @@ mod tests {
     #[test]
     fn orphaned_acp_agents_fires_for_retired_ide_version() {
         let mut report = base_report();
-        report.processes.acp_agents = vec![AcpAgent {
-            pid: 1,
-            etime_seconds: 100,
-            ide_version: "PhpStorm2026.1".to_string(),
-            orphaned: true,
-        }];
+        report.processes.acp_agents = (0..4)
+            .map(|pid| AcpAgent {
+                pid,
+                etime_seconds: 100,
+                ide_version: "PhpStorm2026.1".to_string(),
+                orphaned: pid == 0,
+            })
+            .collect();
         let config = Config::default();
 
         let finding = evaluate(&report, &[], &config)
@@ -667,6 +685,51 @@ mod tests {
         assert!(finding
             .actions
             .contains(&"kill_orphaned_agents".to_string()));
+    }
+
+    #[test]
+    fn orphaned_agents_below_count_fire_as_info() {
+        let mut report = base_report();
+        report.processes.acp_agents = (0..2)
+            .map(|pid| AcpAgent {
+                pid,
+                etime_seconds: 100,
+                ide_version: "PhpStorm2026.1".to_string(),
+                orphaned: true,
+            })
+            .collect();
+        let mut config = Config::default();
+        config.thresholds.acp_agent_warn_count = 3;
+
+        let finding = evaluate(&report, &[], &config)
+            .into_iter()
+            .find(|f| f.rule == "orphaned_acp_agents")
+            .unwrap();
+        assert_eq!(finding.severity, Severity::Info);
+        assert_eq!(
+            finding.message,
+            "2 orphaned PhpStorm ACP agent(s) without an IDE window"
+        );
+        assert!(finding
+            .actions
+            .contains(&"kill_orphaned_agents".to_string()));
+    }
+
+    #[test]
+    fn no_orphans_below_count_stay_silent() {
+        let mut report = base_report();
+        report.processes.acp_agents = (0..2)
+            .map(|pid| AcpAgent {
+                pid,
+                etime_seconds: 100,
+                ide_version: "PhpStorm2026.2".to_string(),
+                orphaned: false,
+            })
+            .collect();
+        let mut config = Config::default();
+        config.thresholds.acp_agent_warn_count = 3;
+
+        assert!(!finds(&report, &[], &config, "orphaned_acp_agents"));
     }
 
     #[test]
