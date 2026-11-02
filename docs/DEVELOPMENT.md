@@ -76,6 +76,18 @@ real experience rather than trust the defaults blindly). Its classification pred
 action-building (`cli/src/main.rs`) so a fresh process snapshot is re-classified with the
 exact same rule the finding used, rather than trusting a possibly-stale PID list.
 
+## Verdict
+
+`core/src/verdict.rs` condenses findings and consumers into the one verdict the menubar
+hero shows: `severity`, `headline`, `detail`, an optional `culprit` and one suggested
+`action`. `derive(report)` runs after `rules::evaluate` (CLI and `vitals-ffi`), so
+`report::collect` only fills `Verdict::calm()` as a placeholder. Only findings at `warn` or
+above count. The highest severity wins, and on a tie `load_status` beats
+`runaway_processes`, which beats `memory_pressure`. CPU verdicts name the top `Process`
+consumer by CPU, memory verdicts the largest DDEV project (else the largest consumer), and
+the action is that consumer's own action. The TTY report prints headline and detail as its
+first line.
+
 ## Config
 
 `core/src/config.rs` loads `~/.vitals.toml`. All sections have `#[serde(default)]`, so

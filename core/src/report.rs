@@ -5,7 +5,7 @@
 use crate::config::Config;
 use crate::error::VitalsError;
 use crate::probes::processes::ProcessEntry;
-use crate::{classify, consumers, probes, types};
+use crate::{classify, consumers, probes, types, verdict};
 
 /// Returns the report alongside the raw process table, since `rules`
 /// needs entries (e.g. a `mutagen` process) that never make it into the
@@ -82,6 +82,7 @@ pub fn collect(config: &Config) -> Result<(types::VitalsReport, Vec<ProcessEntry
         processes,
         findings: Vec::new(),
         consumers: Vec::new(),
+        verdict: verdict::Verdict::calm(),
     };
     report.consumers = consumers::build(&report, &process_entries, config, now);
 

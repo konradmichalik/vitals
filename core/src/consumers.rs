@@ -317,6 +317,7 @@ mod tests {
             processes: ProcessesInfo::default(),
             findings: Vec::new(),
             consumers: Vec::new(),
+            verdict: crate::verdict::Verdict::calm(),
         }
     }
 

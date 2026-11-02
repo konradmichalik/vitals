@@ -13,5 +13,6 @@ pub mod probes;
 pub mod report;
 pub mod rules;
 pub mod types;
+pub mod verdict;
 
 pub use error::VitalsError;

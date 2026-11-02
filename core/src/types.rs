@@ -19,6 +19,8 @@ pub struct VitalsReport {
     pub findings: Vec<Finding>,
     #[serde(default)]
     pub consumers: Vec<crate::consumers::Consumer>,
+    #[serde(default)]
+    pub verdict: crate::verdict::Verdict,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

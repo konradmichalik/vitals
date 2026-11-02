@@ -66,6 +66,7 @@ fn main() -> ExitCode {
     match vitals_core::report::collect(&config) {
         Ok((mut report, processes)) => {
             report.findings = vitals_core::rules::evaluate(&report, &processes, &config);
+            report.verdict = vitals_core::verdict::derive(&report);
             if cli.json {
                 println!(
                     "{}",
@@ -256,6 +257,8 @@ fn format_tty(report: &VitalsReport, use_color: bool) -> String {
     let mut out = String::new();
     let system = &report.system;
 
+    out.push_str(&format_verdict(&report.verdict, use_color));
+    out.push('\n');
     out.push_str(&format!(
         "load     {:.2} {:.2} {:.2}  ({}P {}E, {} total)\n",
         system.load.m1,
@@ -351,6 +354,24 @@ fn format_tty(report: &VitalsReport, use_color: bool) -> String {
     out
 }
 
+fn format_verdict(verdict: &vitals_core::verdict::Verdict, use_color: bool) -> String {
+    let headline = if use_color {
+        let code = match verdict.severity {
+            Some(Severity::Critical) => "31",
+            Some(Severity::Warn) => "33",
+            _ => "32",
+        };
+        format!("\x1b[1;{code}m{}\x1b[0m", verdict.headline)
+    } else {
+        verdict.headline.clone()
+    };
+    if verdict.detail.is_empty() {
+        format!("{headline}\n")
+    } else {
+        format!("{headline}  {}\n", verdict.detail)
+    }
+}
+
 fn report_error(err: &vitals_core::VitalsError, json: bool, use_color: bool) {
     if json {
         let payload = serde_json::json!({ "schemaVersion": vitals_core::types::SCHEMA_VERSION, "error": err.to_string() });
@@ -424,6 +445,7 @@ mod tests {
             processes: ProcessesInfo::default(),
             findings,
             consumers: Vec::new(),
+            verdict: vitals_core::verdict::Verdict::calm(),
         }
     }
 
@@ -465,6 +487,15 @@ mod tests {
                 finding("container_load", Severity::Critical),
             ]),
             2
+        );
+    }
+
+    #[test]
+    fn tty_report_starts_with_verdict() {
+        let text = format_tty(&sample_report(Vec::new()), false);
+        assert_eq!(
+            text.lines().next(),
+            Some("All calm  Nothing is slowing your Mac down.")
         );
     }
 
