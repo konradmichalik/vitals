@@ -8,12 +8,16 @@ extension Notification.Name {
 struct PopoverShell: View {
     @EnvironmentObject private var appState: AppState
     @State private var screen: PopoverScreen = .overview
+    @State private var contentHeight: CGFloat = 0
+
+    /// Keeps the header and footer (Refresh, Quit) on screen when a busy overview grows tall.
+    private static let maxContentHeight: CGFloat = 560
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
             Divider()
-            content
+            scrollingContent
             Divider()
             footer
         }
@@ -27,11 +31,22 @@ struct PopoverShell: View {
         }
     }
 
+    /// A ScrollView has no ideal height inside an NSPopover, so it is sized to the measured content up to the cap.
+    private var scrollingContent: some View {
+        ScrollView {
+            content
+                .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        // Before the first measurement a fixed 0 height would open the popover collapsed.
+        .frame(height: contentHeight > 0 ? min(contentHeight, Self.maxContentHeight) : nil)
+    }
+
     @ViewBuilder
     private var content: some View {
         switch screen {
         case .overview:
-            MenubarView()
+            MenubarView { screen = $0 }
         case .settings:
             PopoverSettingsView()
         case .detail, .toolchain, .activity:

@@ -61,6 +61,30 @@ final class ActionConfirmationTests: XCTestCase {
         XCTAssertFalse(result.isDestructive)
     }
 
+    func testKillRunawayProcesses() {
+        let result = make("kill_runaway_processes")
+        XCTAssertEqual(result.title, "Quit runaway processes?")
+        XCTAssertEqual(result.reversal, "Not reversible")
+        XCTAssertEqual(result.command, "vitals --fix kill_runaway_processes")
+        XCTAssertTrue(result.isDestructive)
+    }
+
+    func testButtonLabelsMatchTheConfirmationVerb() {
+        let expected = [
+            "poweroff": "Power off", "stop_project": "Stop", "start_project": "Start",
+            "stop_backup": "Stop backup", "add_exclusions": "Exclude", "kill_orphaned_agents": "Quit agents",
+            "kill_runaway_processes": "Quit processes", "kill_process": "Quit", "prune_docker_images": "Prune images",
+        ]
+        for (action, label) in expected {
+            XCTAssertEqual(ActionConfirmation.buttonLabel(for: action), label)
+            XCTAssertEqual(make(action, target: "t").buttonLabel, label)
+        }
+    }
+
+    func testUnknownButtonLabelIsSentenceCasedName() {
+        XCTAssertEqual(ActionConfirmation.buttonLabel(for: "list_running_projects"), "List running projects")
+    }
+
     func testCommandIncludesTargetAndEffectIsTheEstimate() {
         let result = make("kill_process", target: "1@2", estimate: "about 2 cores", label: "x")
         XCTAssertEqual(result.command, "vitals --fix kill_process --target 1@2")

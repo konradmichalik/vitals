@@ -1,25 +1,30 @@
 import SwiftUI
 
+/// The overview screen. Every action offered on it runs through the one confirmation alert here.
 struct MenubarView: View {
     @EnvironmentObject private var appState: AppState
-    @State private var pendingAction: PendingAction?
+    let navigate: (PopoverScreen) -> Void
 
-    private struct PendingAction: Identifiable {
-        let action: String
-        var target: String?
-        var id: String { target.map { "\(action)-\($0)" } ?? action }
+    @State private var pending: PendingAction?
+
+    private struct PendingAction {
+        let action: SuggestedAction
+        let confirmation: ActionConfirmation
     }
 
     var body: some View {
         content
-            .alert(item: $pendingAction) { pending in
-                let command = pending.target.map { "\(pending.action) --target \($0)" } ?? pending.action
-                return Alert(
-                    title: Text("Run “\(pending.action)”?"),
-                    message: Text("This runs `vitals --fix \(command)`."),
-                    primaryButton: .destructive(Text("Run")) { runAction(pending.action, target: pending.target) },
-                    secondaryButton: .cancel()
-                )
+            .alert(
+                pending?.confirmation.title ?? "",
+                isPresented: Binding(get: { pending != nil }, set: { if !$0 { pending = nil } }),
+                presenting: pending
+            ) { pending in
+                Button(pending.confirmation.buttonLabel, role: pending.confirmation.isDestructive ? .destructive : nil) {
+                    appState.perform(pending.action)
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: { pending in
+                Text(message(for: pending.confirmation))
             }
     }
 
@@ -39,249 +44,54 @@ struct MenubarView: View {
         }
     }
 
+    private func reportView(_ report: VitalsReport) -> some View {
+        let isRunning: Bool = {
+            if case .running = appState.outcome { return true }
+            return false
+        }()
+        return VStack(alignment: .leading, spacing: 12) {
+            VerdictHero(
+                verdict: report.verdict,
+                focus: VerdictHero.focus(for: report.findings),
+                outcome: appState.outcome,
+                onAction: request,
+                onWhy: { navigate(.detail($0)) }
+            )
+            MetricTiles(report: report, history: appState.history) { navigate(.detail($0)) }
+            FindingsList(
+                findings: appState.visibleFindings,
+                reportHasFindings: !report.findings.isEmpty,
+                isRunning: isRunning,
+                onAction: { request($0, culpritLabel: nil) },
+                onSnooze: { appState.snooze(rule: $0, for: $1) }
+            )
+            ConsumersList(
+                consumers: report.consumers,
+                culpritID: report.verdict.culprit?.id,
+                defaultSort: ConsumerSort.defaultSort(for: report.findings),
+                isRunning: isRunning,
+                onAction: request
+            )
+            ToolchainChips(report: report) { navigate(.toolchain($0)) }
+        }
+        .padding(12)
+    }
+
+    private func request(_ action: SuggestedAction, culpritLabel: String?) {
+        pending = PendingAction(action: action, confirmation: ActionConfirmation.make(for: action, culpritLabel: culpritLabel))
+    }
+
+    private func message(for confirmation: ActionConfirmation) -> String {
+        let effect = confirmation.effect.map { "Effect: \($0)" }
+        return [confirmation.body, effect, confirmation.reversal].compactMap { $0 }.joined(separator: "\n")
+    }
+
     private func message(for error: VitalsCollectError) -> String {
         switch error {
         case .nullPointer, .invalidUTF8, .malformed:
             return "vitals-ffi returned an unexpected response."
         case .reported(let message):
             return message
-        }
-    }
-
-    private func reportView(_ report: VitalsReport) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            metricsSection(report)
-            findingsSection(report)
-        }
-        .padding(12)
-    }
-
-    /// Two bordered "cards" rather than one: the load card's tint reflects
-    /// `LoadStatus`, which only ever evaluates load average — wrapping
-    /// CPU/RAM and the DDEV list in that same colored border implied they
-    /// shared that severity too, when they've got no relation to it at
-    /// all. The second card groups them under a neutral, severity-free
-    /// border instead.
-    private func metricsSection(_ report: VitalsReport) -> some View {
-        let status = LoadStatus.evaluate(load1: report.system.load.m1, performanceCores: report.system.cores.performance)
-
-        return VStack(alignment: .leading, spacing: 10) {
-            card(color: status.color) {
-                loadSection(report, status: status)
-            }
-
-            card(color: .secondary) {
-                cpuMemorySection(report)
-
-                Divider()
-
-                DdevProjectsSection(
-                    report: report,
-                    onPoweroff: { pendingAction = PendingAction(action: "poweroff") },
-                    onStop: { project in pendingAction = PendingAction(action: "stop_project", target: project) }
-                )
-
-                if !report.processes.claudeSessions.isEmpty {
-                    Divider()
-                    ClaudeSessionsSection(sessions: report.processes.claudeSessions)
-                }
-
-                Divider()
-
-                ServicesSection(
-                    timeMachine: report.timeMachine,
-                    agents: report.processes.acpAgents
-                )
-            }
-        }
-    }
-
-    /// The background tint alone barely showed up against the window's
-    /// own vibrancy material, so a matching-color border makes the
-    /// boundary actually visible.
-    private func card(color: Color, @ViewBuilder content: () -> some View) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            content()
-        }
-        .padding(10)
-        .background(color.opacity(0.1), in: RoundedRectangle(cornerRadius: 8))
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(color.opacity(0.25), lineWidth: 1)
-        )
-    }
-
-    private func loadSection(_ report: VitalsReport, status: LoadStatus) -> some View {
-        let load = report.system.load
-        let cores = report.system.cores
-        let fraction = LoadStatus.progressFraction(load1: load.m1, performanceCores: cores.performance)
-
-        return VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                SectionHeader(icon: "gauge.medium", title: "Load average")
-                Spacer()
-                Text(status.label)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(status.color)
-            }
-            ProgressView(value: fraction)
-                .tint(status.color)
-            // htop-style single label rather than per-number labels — the
-            // 1/5/15m order is well-established and per-number labels
-            // just add noise. The caption below explains what the raw
-            // Unix convention actually means — the numbers alone don't.
-            Text(String(format: "%.2f · %.2f · %.2f", load.m1, load.m5, load.m15))
-                .font(.callout.weight(.bold))
-                .foregroundStyle(status.color)
-            Sparkline(values: appState.history.map(\.load), color: status.color) { index in
-                let sample = appState.history[index]
-                return "\(String(format: "%.2f", sample.load)) · \(sample.loadStatus.label) · \(relativeTime(sample.timestamp))"
-            }
-            Text(
-                "1/5/15 min avg — processes waiting for a CPU core, " +
-                "relative to \(cores.performance) performance cores"
-            )
-            .font(.caption2)
-            .foregroundStyle(.tertiary)
-            .fixedSize(horizontal: false, vertical: true)
-            TopProcessesSection(processes: report.processes.topByCpu) { process in
-                pendingAction = PendingAction(action: "kill_process", target: "\(process.pid)@\(process.startedAt)")
-            }
-        }
-    }
-
-    private func cpuMemorySection(_ report: VitalsReport) -> some View {
-        let cpuUsedPercent = Int((100 - report.system.cpu.idlePercent).rounded())
-        let memColor = memoryColor(report.system.memory.pressureLevel)
-
-        return VStack(alignment: .leading, spacing: 6) {
-            SectionHeader(icon: "cpu", title: "CPU & Memory")
-            HStack {
-                Text("\(cpuUsedPercent)% CPU")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                Text("· \(report.system.memory.usedPercent)% RAM used")
-                    .font(.caption)
-                    .foregroundStyle(memColor)
-            }
-            DualSparkline(
-                primaryValues: appState.history.map(\.cpuUsedPercent),
-                primaryColor: .secondary,
-                secondaryValues: appState.history.map(\.memoryUsedPercent),
-                secondaryColor: memColor
-            ) { index in
-                let sample = appState.history[index]
-                return "\(Int(sample.cpuUsedPercent))% CPU · \(Int(sample.memoryUsedPercent))% RAM "
-                    + "(\(sample.memoryPressure.rawValue)) · \(relativeTime(sample.timestamp))"
-            }
-            if let caption = historySpanCaption(appState.history) {
-                Text(caption)
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
-            }
-        }
-    }
-
-    /// Sparklines hide their X axis to stay compact, so without this
-    /// there'd be no way to tell whether the trend covers the last 5
-    /// minutes or the last 15 — it varies with `AppState`'s adaptive poll
-    /// interval (§4: 30s green, 10s once something's firing).
-    private static let relativeTimeFormatter: RelativeDateTimeFormatter = {
-        let formatter = RelativeDateTimeFormatter()
-        formatter.unitsStyle = .abbreviated
-        return formatter
-    }()
-
-    private func relativeTime(_ date: Date) -> String {
-        Self.relativeTimeFormatter.localizedString(for: date, relativeTo: Date())
-    }
-
-    private func historySpanCaption(_ history: [MetricSample]) -> String? {
-        guard let oldest = history.first?.timestamp else { return nil }
-        let seconds = Date().timeIntervalSince(oldest)
-        guard seconds >= 30 else { return nil }
-
-        let formatter = DateComponentsFormatter()
-        formatter.allowedUnits = [.hour, .minute, .second]
-        formatter.unitsStyle = .abbreviated
-        formatter.maximumUnitCount = 1
-        guard let formatted = formatter.string(from: seconds) else { return nil }
-        return "Trend: last ~\(formatted)"
-    }
-
-    /// Mirrors `LoadStatus`/`TrafficLight`'s color language for the
-    /// warn/critical escalation, but `.normal` gets its own blue (not
-    /// `.secondary`) — the CPU line right next to it in the combined
-    /// sparkline is already `.secondary`, and both being gray made the
-    /// two lines indistinguishable whenever memory pressure was normal.
-    private func memoryColor(_ level: PressureLevel) -> Color {
-        switch level {
-        case .normal: return .blue
-        case .warn: return .orange
-        case .critical: return .red
-        }
-    }
-
-    @ViewBuilder
-    private func findingsSection(_ report: VitalsReport) -> some View {
-        let visible = appState.visibleFindings
-        if visible.isEmpty && !report.findings.isEmpty {
-            // The pill still reflects snoozed findings, so "normal" here would contradict it.
-            HStack(spacing: 6) {
-                Image(systemName: "bell.slash")
-                Text("All findings snoozed.")
-            }
-            .font(.callout)
-            .foregroundStyle(.secondary)
-        } else if visible.isEmpty {
-            HStack(spacing: 6) {
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
-                Text("All vital signs normal.")
-            }
-            .font(.callout)
-            .foregroundStyle(.secondary)
-        } else {
-            VStack(alignment: .leading, spacing: 6) {
-                SectionHeader(icon: "exclamationmark.triangle", title: "Findings")
-                // A Divider between rows (not around the whole group) so
-                // the list reads as one connected block instead of
-                // findings running into each other with only padding
-                // between them.
-                VStack(alignment: .leading, spacing: 0) {
-                    ForEach(Array(visible.sortedBySeverity().enumerated()), id: \.element.id) { index, finding in
-                        if index > 0 {
-                            Divider()
-                        }
-                        FindingRow(finding: finding) { action in
-                            pendingAction = PendingAction(action: action)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    private func runAction(_ action: String, target: String? = nil) {
-        Task.detached(priority: .userInitiated) {
-            let result = ActionRunner.run(action: action, target: target)
-            let message: String
-            let kind: AppNotifier.Kind
-            switch result {
-            case .success(let output):
-                message = output.isEmpty ? "Done: \(action)" : output
-                kind = .success
-            case .failure(let error):
-                message = error.message
-                kind = .failure
-            }
-            // A system notification rather than inline text in the
-            // dropdown — actions run detached and the dropdown is very
-            // likely closed by the time a `stop_project`/similar action
-            // actually finishes, so an inline result alone would go
-            // unseen.
-            await AppNotifier.notify(id: "action-\(action)", title: "Vitals", body: message, kind: kind)
-            await appState.refresh()
         }
     }
 }

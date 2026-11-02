@@ -1,16 +1,11 @@
 import Charts
 import SwiftUI
 
-/// Shared by `Sparkline` and `DualSparkline` — every line in either
-/// chart uses the same weight/cap/join, so both charts stay visually
-/// consistent as a pair.
 private let sparklineLineStyle = StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round)
 
 private extension View {
-    /// The chart-frame chrome both `Sparkline` and `DualSparkline` share
-    /// — no axes/legend, and a domain that doesn't force 0 as the floor
-    /// so small fluctuations in a narrow band (e.g. RAM hovering around
-    /// 80%) are still visible as a real trend, not a near-flat line.
+    /// A domain that does not force 0 as the floor keeps small fluctuations
+    /// in a narrow band (RAM hovering around 80%) visible as a trend.
     func sparklineChartStyle() -> some View {
         chartXAxis(.hidden)
             .chartYAxis(.hidden)
@@ -58,72 +53,6 @@ struct Sparkline: View {
         .frame(maxWidth: .infinity)
         .frame(height: 24)
     }
-}
-
-/// Two related percentage series sharing one axis (CPU and memory both
-/// being 0–100 already makes a shared scale meaningful, unlike load —
-/// see `Sparkline`), so they fit in the vertical space one chart needs
-/// instead of two.
-///
-/// Uses the categorical `foregroundStyle(by:)` + `chartForegroundStyleScale`
-/// pattern over one unified `Chart(data:)` data source, rather than two
-/// separate `ForEach` blocks each with their own manual `.foregroundStyle`
-/// — the manual version produced visible rendering artifacts (a spurious
-/// extra line, colors not applying) despite giving each series its own
-/// unique mark identities. This categorical form is Charts' own supported
-/// way to draw multiple distinctly colored lines and doesn't have that
-/// problem.
-struct DualSparkline: View {
-    let primaryValues: [Double]
-    let primaryColor: Color
-    let secondaryValues: [Double]
-    let secondaryColor: Color
-    let tooltip: (Int) -> String
-
-    @State private var hoveredIndex: Int?
-
-    private static let primarySeries = "primary"
-    private static let secondarySeries = "secondary"
-
-    private var points: [SeriesPoint] {
-        let primary = primaryValues.enumerated().map {
-            SeriesPoint(id: "p-\($0.offset)", index: $0.offset, value: $0.element, series: Self.primarySeries)
-        }
-        let secondary = secondaryValues.enumerated().map {
-            SeriesPoint(id: "s-\($0.offset)", index: $0.offset, value: $0.element, series: Self.secondarySeries)
-        }
-        return primary + secondary
-    }
-
-    var body: some View {
-        Chart(points) { point in
-            LineMark(x: .value("Sample", point.index), y: .value("Value", point.value))
-                .foregroundStyle(by: .value("Series", point.series))
-                .interpolationMethod(.catmullRom)
-                .lineStyle(sparklineLineStyle)
-        }
-        .chartForegroundStyleScale([Self.primarySeries: primaryColor, Self.secondarySeries: secondaryColor])
-        .sparklineChartStyle()
-        .chartOverlay { proxy in
-            SparklineHoverOverlay(proxy: proxy, sampleCount: secondaryValues.count, hoveredIndex: $hoveredIndex) { index in
-                guard let secondaryY = proxy.position(forY: secondaryValues[index]) else { return nil }
-                var indicatorPoints = [IndicatorPoint(y: secondaryY, color: secondaryColor)]
-                if let primaryY = proxy.position(forY: primaryValues[index]) {
-                    indicatorPoints.append(IndicatorPoint(y: primaryY, color: primaryColor))
-                }
-                return SparklineIndicator(points: indicatorPoints, tooltip: tooltip(index))
-            }
-        }
-        .frame(maxWidth: .infinity)
-        .frame(height: 28)
-    }
-}
-
-private struct SeriesPoint: Identifiable {
-    let id: String
-    let index: Int
-    let value: Double
-    let series: String
 }
 
 private struct IndicatorPoint {
