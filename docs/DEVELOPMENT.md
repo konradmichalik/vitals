@@ -145,7 +145,7 @@ list right before the signal, so a PID reused while the prompt was open is not k
 then sends `SIGTERM`, waits 2 seconds and sends `SIGKILL` only if the PID is still alive.
 
 `start_project` takes `--target <project-name>` and runs `ddev start <name>` through
-`run_with_timeout` (180 s). It is the counterpart of `stop_project`: the DDEV tab offers
+`run_with_timeout` (600 s). It is the counterpart of `stop_project`: the DDEV tab offers
 Start for projects whose status is `stopped` or `paused`, and Stop for `running` ones.
 
 ## Menubar app (app/)

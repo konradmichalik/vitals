@@ -8,6 +8,9 @@ use crate::probes::shell;
 use crate::{probes, report};
 use std::time::Duration;
 
+/// A first start can pull images, and the timeout kills the child, leaving a half started project.
+const START_PROJECT_TIMEOUT: Duration = Duration::from_secs(600);
+
 /// Every name `vitals --fix <name>` accepts — the single source of truth
 /// shared by the CLI's parser error message and the rules' contract test,
 /// so a rule can never again advertise an action that doesn't exist.
@@ -68,8 +71,7 @@ impl Action {
             Action::Poweroff => shell::run("ddev", &["poweroff"]).map(drop),
             Action::StopProject(name) => shell::run("ddev", &["stop", name]).map(drop),
             Action::StartProject(name) => {
-                shell::run_with_timeout("ddev", &["start", name], Duration::from_secs(180))
-                    .map(drop)
+                shell::run_with_timeout("ddev", &["start", name], START_PROJECT_TIMEOUT).map(drop)
             }
             Action::StopBackup => shell::run("tmutil", &["stopbackup"]).map(drop),
             Action::AddExclusions(paths) => {
