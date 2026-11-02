@@ -49,11 +49,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, UNU
     func applicationWillFinishLaunching(_ notification: Foundation.Notification) {
         guard !isRunningTests else { return }
         NSApp.setActivationPolicy(.accessory)
+        UNUserNotificationCenter.current().delegate = self
     }
 
     func applicationDidFinishLaunching(_ notification: Foundation.Notification) {
         guard !isRunningTests else { return }
-        UNUserNotificationCenter.current().delegate = self
         if notifyOnAlerts {
             AppNotifier.requestPermission()
         }
@@ -116,22 +116,55 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, UNU
     }
 
     @objc private func toggleDropdown() {
-        guard let popover, let button = statusItem?.button else { return }
+        guard let popover else { return }
         if popover.isShown {
             popover.performClose(nil)
         } else {
-            // `.transient` dismisses on an outside click via NSPopover's
-            // own event monitor, set up as part of showing the popover
-            // and taking key window status — manually forcing
-            // `.becomeKey()` on its window right after `.show()` (the
-            // previous code here) stepped on that internal setup, so
-            // outside clicks never dismissed it. Activating the app
-            // first is the standard way an accessory app's popover gets
-            // real focus without needing to manage window key status by
-            // hand.
-            NSApp.activate(ignoringOtherApps: true)
-            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+            showPopover()
         }
+    }
+
+    private func showPopover() {
+        guard let popover, let button = statusItem?.button else { return }
+        // `.transient` dismisses on an outside click via NSPopover's
+        // own event monitor, set up as part of showing the popover
+        // and taking key window status. Manually forcing
+        // `.becomeKey()` on its window right after `.show()` stepped
+        // on that internal setup, so outside clicks never dismissed
+        // it. Activating the app
+        // first is the standard way an accessory app's popover gets
+        // real focus without needing to manage window key status by
+        // hand.
+        NSApp.activate(ignoringOtherApps: true)
+        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+    }
+
+    private func showOverview() {
+        if popover?.isShown == true {
+            NotificationCenter.default.post(name: .popoverShowOverview, object: nil)
+            NSApp.activate(ignoringOtherApps: true)
+        } else {
+            showPopover()
+        }
+    }
+
+    private func handle(_ response: NotificationResponse) {
+        switch response {
+        case .show: showOverview()
+        case .snooze(let rule): appState.snooze(rule: rule, for: .oneHour)
+        case .ignore: break
+        }
+    }
+
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse
+    ) async {
+        let parsed = NotificationResponse.parse(
+            actionIdentifier: response.actionIdentifier,
+            userInfo: response.notification.request.content.userInfo
+        )
+        await MainActor.run { handle(parsed) }
     }
 
     nonisolated func userNotificationCenter(

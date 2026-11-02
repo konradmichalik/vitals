@@ -2,6 +2,8 @@ import SwiftUI
 
 extension Notification.Name {
     static let popoverDidClose = Notification.Name("VitalsPopoverDidClose")
+    /// Sent while the popover is open, for example from a banner action, to jump back to the overview.
+    static let popoverShowOverview = Notification.Name("VitalsPopoverShowOverview")
 }
 
 /// Hosts every popover screen and owns the shared header and footer chrome.
@@ -27,6 +29,9 @@ struct PopoverShell: View {
         .background(Color(nsColor: .windowBackgroundColor))
         // The hosted view stays alive while the popover is closed, so onDisappear is not reliable here.
         .onReceive(NotificationCenter.default.publisher(for: .popoverDidClose)) { _ in
+            screen = .overview
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .popoverShowOverview)) { _ in
             screen = .overview
         }
     }

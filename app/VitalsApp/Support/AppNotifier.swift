@@ -48,16 +48,30 @@ enum AppNotifier {
         }
     }
 
+    static let findingCategory = "finding"
+
     static func requestPermission() {
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
+        let center = UNUserNotificationCenter.current()
+        let show = UNNotificationAction(identifier: NotificationResponse.showAction, title: "Show cause", options: [.foreground])
+        let snooze = UNNotificationAction(identifier: NotificationResponse.snoozeAction, title: "Snooze 1 h", options: [])
+        center.setNotificationCategories([
+            UNNotificationCategory(identifier: findingCategory, actions: [show, snooze], intentIdentifiers: [], options: [])
+        ])
+        center.requestAuthorization(options: [.alert, .sound, .badge]) { _, _ in }
     }
 
+    /// `rule` marks a finding banner: it gets the action buttons and carries
+    /// the rule for the response handler. Action-result banners pass nil.
     @MainActor
-    static func notify(id: String, title: String, body: String, kind: Kind) {
+    static func notify(id: String, title: String, body: String, kind: Kind, rule: String? = nil) {
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
         content.sound = .default
+        if let rule {
+            content.categoryIdentifier = findingCategory
+            content.userInfo = ["rule": rule]
+        }
         if let attachment = iconAttachment(kind: kind) {
             content.attachments = [attachment]
         }

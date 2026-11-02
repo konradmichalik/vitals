@@ -166,7 +166,7 @@ final class AppState: ObservableObject {
 
             let isCritical = finding.severity == .critical
             let title = isCritical ? "Vitals — critical" : "Vitals — warning"
-            AppNotifier.notify(id: rule, title: title, body: finding.message, kind: isCritical ? .critical : .warning)
+            AppNotifier.notify(id: rule, title: title, body: finding.message, kind: isCritical ? .critical : .warning, rule: rule)
         }
     }
 
