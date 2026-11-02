@@ -97,4 +97,26 @@ final class ActionRunnerTests: XCTestCase {
     func testKillRunawayProcessesIsRunnable() {
         XCTAssertTrue(ActionRunner.runnableActions.contains("kill_runaway_processes"))
     }
+
+    private func suggested(_ action: String, target: String? = nil) -> SuggestedAction {
+        SuggestedAction(action: action, target: target, label: "x", estimate: nil)
+    }
+
+    func testKillProcessWithoutTargetIsNotRunnable() {
+        XCTAssertFalse(ActionRunner.isRunnable(suggested("kill_process")))
+    }
+
+    func testStopProjectWithTargetIsRunnable() {
+        XCTAssertTrue(ActionRunner.isRunnable(suggested("stop_project", target: "witte")))
+    }
+
+    func testBuildArgumentsForKillProcessPassesTarget() {
+        let args = ActionRunner.buildArguments(action: "kill_process", target: "48213@999400")
+        XCTAssertEqual(args, ["--fix", "kill_process", "--yes", "--target", "48213@999400"])
+    }
+
+    func testUnknownActionOutputIsShownVerbatim() {
+        let output = "vitals: unknown action `kill_process` (try --help)"
+        XCTAssertEqual(ActionRunnerError.nonZeroExit("  \(output)\n").message, output)
+    }
 }

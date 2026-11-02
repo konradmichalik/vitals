@@ -189,8 +189,8 @@ struct MenubarView: View {
             .font(.caption2)
             .foregroundStyle(.tertiary)
             .fixedSize(horizontal: false, vertical: true)
-            TopProcessesSection(processes: report.processes.topByCpu) { pid in
-                pendingAction = PendingAction(action: "kill_session", target: String(pid))
+            TopProcessesSection(processes: report.processes.topByCpu) { process in
+                pendingAction = PendingAction(action: "kill_process", target: "\(process.pid)@\(process.startedAt)")
             }
         }
     }

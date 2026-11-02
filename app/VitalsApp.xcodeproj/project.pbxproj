@@ -32,6 +32,7 @@
 		AA4B613AE802D9818156CB2F /* SectionHeader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 98E2637CD2BA3F5589C78DEF /* SectionHeader.swift */; };
 		AB32AD88721AB790610BE73A /* VitalsBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 566229B483107F02FF8B4096 /* VitalsBridge.swift */; };
 		AB69DB2ABD914FECA8A6EF6B /* FindingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5D365FA57A709BC4D3E6D59 /* FindingTests.swift */; };
+		AF173136911AF35CA1A4422B /* ActionConfirmationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2939E27162FEB61041D5F1F8 /* ActionConfirmationTests.swift */; };
 		AF37E4EFF4B806CAF20CF3E1 /* ClaudeSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBBD424F8327E49B71510E78 /* ClaudeSessionTests.swift */; };
 		AFEB5BA7566E8294F02A0C6A /* SeverityBadge.swift in Sources */ = {isa = PBXBuildFile; fileRef = 90B864952B8B1DD13CCB985A /* SeverityBadge.swift */; };
 		B0E613EAA7BF5A5773AA7BFA /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A972740A8FC992B5AAA8F2A3 /* SettingsView.swift */; };
@@ -43,6 +44,7 @@
 		C2586DFD0C0585FFA9ACF8D7 /* MetricHistoryStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DFCA98C52002D47C79BE8309 /* MetricHistoryStore.swift */; };
 		C79937B3ACF6F507267641DF /* LaunchAtLogin.swift in Sources */ = {isa = PBXBuildFile; fileRef = AAD560573ED4211A14D76800 /* LaunchAtLogin.swift */; };
 		C98FDD842A92DC90F49321DC /* LoadStatus.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5CCE0871B1D9C24F8340D57 /* LoadStatus.swift */; };
+		CAE242C598A5B23B52A9BFB3 /* ActionConfirmation.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7315BDB012618554D16A877C /* ActionConfirmation.swift */; };
 		D19D72DAE9BB4FA1B850190D /* VitalsApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B2439323627621091AF275C /* VitalsApp.swift */; };
 		D9E1DE53D286C84E202BDD21 /* ClaudeSessionsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 79FA2F45F1A46F63F0347866 /* ClaudeSessionsSection.swift */; };
 		DCFC3D3AFFC7198ED70FA1F4 /* TrafficLightTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 29004B98A4F3CE2DFFF39055 /* TrafficLightTests.swift */; };
@@ -67,6 +69,7 @@
 		1B6F0C818A25216ADD56C541 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		29004B98A4F3CE2DFFF39055 /* TrafficLightTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TrafficLightTests.swift; sourceTree = "<group>"; };
 		290BA3662BC799B918787937 /* VitalsReport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VitalsReport.swift; sourceTree = "<group>"; };
+		2939E27162FEB61041D5F1F8 /* ActionConfirmationTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionConfirmationTests.swift; sourceTree = "<group>"; };
 		2B2439323627621091AF275C /* VitalsApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VitalsApp.swift; sourceTree = "<group>"; };
 		2BEB938924F558549E0A1143 /* TopProcessesSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TopProcessesSection.swift; sourceTree = "<group>"; };
 		2CEBA9486E13C6266D4845B0 /* ConfigTemplateTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigTemplateTests.swift; sourceTree = "<group>"; };
@@ -81,6 +84,7 @@
 		69E1B94B0D5C41AA47143FE7 /* vitals.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = vitals.h; sourceTree = "<group>"; };
 		6CF9C0ADDB9F00B30E3C83D7 /* AppState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppState.swift; sourceTree = "<group>"; };
 		6D42079C741EE3CF8C942871 /* ServiceSummary.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceSummary.swift; sourceTree = "<group>"; };
+		7315BDB012618554D16A877C /* ActionConfirmation.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionConfirmation.swift; sourceTree = "<group>"; };
 		75DB8D816C0B6F41015C9E9F /* LoadStatusTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoadStatusTests.swift; sourceTree = "<group>"; };
 		79FA2F45F1A46F63F0347866 /* ClaudeSessionsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClaudeSessionsSection.swift; sourceTree = "<group>"; };
 		7DBADCF855F653FFF63B2715 /* Consumer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Consumer.swift; sourceTree = "<group>"; };
@@ -115,6 +119,7 @@
 		03982D87335BD4CE11EDC467 /* Support */ = {
 			isa = PBXGroup;
 			children = (
+				7315BDB012618554D16A877C /* ActionConfirmation.swift */,
 				637F9BCDC897949A2C32F6C1 /* ActionRunner.swift */,
 				FCB2D98E1F46D81928FDBFEC /* AppDelegate.swift */,
 				8D515F029BA0CDFA363A49B0 /* AppNotifier.swift */,
@@ -133,6 +138,7 @@
 		05709149F3873377DC53369E /* VitalsAppTests */ = {
 			isa = PBXGroup;
 			children = (
+				2939E27162FEB61041D5F1F8 /* ActionConfirmationTests.swift */,
 				8B3016AB01E66627C6A411B3 /* ActionRunnerTests.swift */,
 				55C780348E2A0DDD27BF8038 /* AppStateTests.swift */,
 				EBBD424F8327E49B71510E78 /* ClaudeSessionTests.swift */,
@@ -334,6 +340,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				CAE242C598A5B23B52A9BFB3 /* ActionConfirmation.swift in Sources */,
 				08F590A7B05AAD20A2EDE411 /* ActionRunner.swift in Sources */,
 				A8B75056BB33A490AF247281 /* AppDelegate.swift in Sources */,
 				97A675871C3BB76AF89A5D1C /* AppNotifier.swift in Sources */,
@@ -369,6 +376,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				AF173136911AF35CA1A4422B /* ActionConfirmationTests.swift in Sources */,
 				4C3EF871D1D6689C2AC646D0 /* ActionRunnerTests.swift in Sources */,
 				22E23D6F0B3CC64C2E56FC9C /* AppStateTests.swift in Sources */,
 				AF37E4EFF4B806CAF20CF3E1 /* ClaudeSessionTests.swift in Sources */,

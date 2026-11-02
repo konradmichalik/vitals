@@ -2,14 +2,14 @@ import SwiftUI
 
 /// Answers "what's actually driving load right now" — a critical
 /// `load_status` finding names the load figure but never the process
-/// behind it. `kill_session` (already wired end-to-end in the CLI for
-/// killing an arbitrary PID, previously with no UI path to it) offers a
-/// way to act on what's found here directly, on top of
+/// behind it. `kill_process` (identity-checked via `pid@started_at`, so a
+/// recycled PID is never hit) offers a way to act on what's found here
+/// directly, on top of
 /// `kill_runaway_processes`'s separate, criteria-gated path for sustained
 /// offenders.
 struct TopProcessesSection: View {
     let processes: [TopProcess]
-    let onKill: (UInt32) -> Void
+    let onKill: (TopProcess) -> Void
     @State private var isExpanded = false
 
     private var summary: String {
@@ -31,7 +31,7 @@ struct TopProcessesSection: View {
                             Text("\(Int(process.cpuPercent.rounded()))% CPU")
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
-                            Button("Kill") { onKill(process.pid) }
+                            Button("Kill") { onKill(process) }
                                 .buttonStyle(.bordered)
                                 .controlSize(.small)
                         }
