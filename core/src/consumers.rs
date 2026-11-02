@@ -81,7 +81,7 @@ fn build_with_home(
             || g.cpu_percent >= MIN_CPU_PERCENT
             || g.mem_bytes >= MIN_MEM_BYTES
     });
-    groups.sort_by(|a, b| b.mem_bytes.cmp(&a.mem_bytes));
+    groups.sort_by_key(|g| std::cmp::Reverse(g.mem_bytes));
     let busiest = busiest_ids(&groups);
     let overflow = groups.split_off(MAX_GROUPS.min(groups.len()));
     // Runaways are verdict culprits and the CPU-heavy groups are what a CPU sort expects to find,

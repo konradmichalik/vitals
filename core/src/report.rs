@@ -129,7 +129,7 @@ fn top_processes_by(
     let mut sorted: Vec<&ProcessEntry> = processes.iter().collect();
     match key {
         SortKey::Cpu => sorted.sort_by(|a, b| b.cpu_percent.total_cmp(&a.cpu_percent)),
-        SortKey::Memory => sorted.sort_by(|a, b| b.rss_bytes.cmp(&a.rss_bytes)),
+        SortKey::Memory => sorted.sort_by_key(|p| std::cmp::Reverse(p.rss_bytes)),
     }
     sorted
         .into_iter()
