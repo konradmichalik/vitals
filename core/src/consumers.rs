@@ -104,6 +104,10 @@ fn busiest_ids(groups: &[Consumer]) -> HashSet<String> {
         .collect()
 }
 
+fn counted(n: usize, one: &str, many: &str) -> String {
+    format!("{n} {}", if n == 1 { one } else { many })
+}
+
 /// Consumer id of a plain process, also how the verdict finds a runaway.
 pub(crate) fn process_id(pid: u32) -> String {
     format!("proc:{pid}")
@@ -124,7 +128,7 @@ fn ddev_groups(report: &VitalsReport) -> Vec<Consumer> {
                 id: format!("ddev:{project}"),
                 kind: ConsumerKind::DdevProject,
                 label: format!("ddev · {project}"),
-                detail: Some(format!("{} containers", containers.len())),
+                detail: Some(counted(containers.len(), "container", "containers")),
                 cpu_percent: containers.iter().map(|c| c.cpu_percent).sum(),
                 mem_bytes,
                 children: containers
@@ -182,7 +186,7 @@ fn claude_group(
         id: "claude".to_string(),
         kind: ConsumerKind::ClaudeCli,
         label: "Claude CLI".to_string(),
-        detail: Some(format!("{} sessions", sessions.len())),
+        detail: Some(counted(sessions.len(), "session", "sessions")),
         cpu_percent: sessions.iter().map(|s| s.cpu_percent).sum(),
         mem_bytes: sessions.iter().map(|s| s.rss_bytes).sum(),
         children,
@@ -225,7 +229,7 @@ fn process_groups(
     let mut groups: Vec<Consumer> = apps
         .into_values()
         .map(|(mut group, count)| {
-            group.detail = Some(format!("{count} processes"));
+            group.detail = Some(counted(count, "process", "processes"));
             group
         })
         .collect();
@@ -580,6 +584,13 @@ mod tests {
     }
 
     #[test]
+    fn counts_use_the_singular_for_one() {
+        assert_eq!(counted(1, "session", "sessions"), "1 session");
+        assert_eq!(counted(0, "session", "sessions"), "0 sessions");
+        assert_eq!(counted(20, "session", "sessions"), "20 sessions");
+    }
+
+    #[test]
     fn runaway_inside_an_app_bundle_is_its_own_process() {
         let helper = "/Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Helper \
                       (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer)";
@@ -594,7 +605,7 @@ mod tests {
         ];
         let groups = run(&report(), &processes);
         let app = groups.iter().find(|g| g.id == "app:Google Chrome").unwrap();
-        assert_eq!(app.detail.as_deref(), Some("1 processes"));
+        assert_eq!(app.detail.as_deref(), Some("1 process"));
         let proc = groups.iter().find(|g| g.id == "proc:11").unwrap();
         assert_eq!(proc.kind, ConsumerKind::Process);
         assert_eq!(proc.label, "Google Chrome Helper (Renderer)");
