@@ -24,6 +24,7 @@ struct ConsumersList: View {
                         ForEach(ConsumerSort.allCases, id: \.self) { Text($0.label).tag($0) }
                     }
                     .pickerStyle(.segmented)
+                    .controlSize(.small)
                     .labelsHidden()
                     .fixedSize()
                     .accessibilityLabel("Sort consumers by")

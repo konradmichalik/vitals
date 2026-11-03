@@ -92,7 +92,9 @@ struct PopoverShell: View {
     private var footer: some View {
         HStack {
             if let lastUpdated = appState.lastUpdated {
-                Text("Updated ").font(.caption) + Text(lastUpdated, style: .relative).font(.caption)
+                (Text("Updated ") + Text(lastUpdated, style: .relative))
+                    .font(.caption)
+                    .environment(\.locale, Locale(identifier: "en_US"))
             } else {
                 Text("Updating…").font(.caption)
             }

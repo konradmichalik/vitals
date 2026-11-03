@@ -44,8 +44,10 @@ struct ToolchainChips: View {
     private func status(_ tab: ToolTab) -> String {
         switch tab {
         case .ddev: return "\(report.ddev.running.count) running"
-        case .docker: return "\(report.docker.containers.count) containers"
-        case .claude: return "\(report.processes.claudeSessions.count) sessions"
+        case .docker: return "\(report.docker.containers.count) running"
+        case .claude:
+            let count = report.processes.claudeSessions.count
+            return "\(count) \(count == 1 ? "session" : "sessions")"
         case .backup: return report.timeMachine.running ? "Running" : "Idle"
         }
     }

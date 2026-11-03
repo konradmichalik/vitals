@@ -3,18 +3,19 @@ import SwiftUI
 /// The rule findings not covered by a snooze, each with its first runnable action and a snooze menu.
 struct FindingsList: View {
     let findings: [Finding]
-    let reportHasFindings: Bool
+    let snoozedCount: Int
+    let isCalm: Bool
     let isRunning: Bool
     let onAction: (SuggestedAction) -> Void
     let onSnooze: (String, SnoozeDuration) -> Void
 
     var body: some View {
-        if findings.isEmpty && reportHasFindings {
+        if findings.isEmpty && snoozedCount > 0 {
             // The pill still reflects snoozed findings, so "normal" here would contradict it.
             emptyState("All findings snoozed.", symbol: "bell.slash")
-        } else if findings.isEmpty {
+        } else if findings.isEmpty && isCalm {
             emptyState("All vital signs normal.", symbol: "checkmark.circle")
-        } else {
+        } else if !findings.isEmpty {
             VStack(alignment: .leading, spacing: 6) {
                 SectionHeader(icon: "exclamationmark.triangle", title: "Findings")
                 VStack(alignment: .leading, spacing: 0) {
@@ -69,6 +70,15 @@ struct FindingsList: View {
         .fixedSize()
         .accessibilityLabel("Snooze options")
         .help("Snooze options")
+    }
+
+    /// The verdict already states its leading finding, so the list holds the others.
+    /// `snoozed` counts the others hidden by a snooze.
+    static func listed(all: [Finding], visible: [Finding]) -> (shown: [Finding], snoozed: Int) {
+        let leading = all.verdictFinding?.rule
+        let others = all.filter { $0.rule != leading }
+        let shown = visible.filter { $0.rule != leading }
+        return (shown, others.count - shown.count)
     }
 
     /// Findings name actions without a target, so only the target-less ones can run from here.

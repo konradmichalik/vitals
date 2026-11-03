@@ -29,6 +29,7 @@ struct MenubarView: View {
 
     private func reportView(_ report: VitalsReport) -> some View {
         let isRunning = appState.outcome.isRunning
+        let listed = FindingsList.listed(all: report.findings, visible: appState.visibleFindings)
         return VStack(alignment: .leading, spacing: 12) {
             VerdictHero(
                 verdict: report.verdict,
@@ -39,8 +40,9 @@ struct MenubarView: View {
             )
             MetricTiles(report: report, history: appState.history) { navigate(.detail($0)) }
             FindingsList(
-                findings: appState.visibleFindings,
-                reportHasFindings: !report.findings.isEmpty,
+                findings: listed.shown,
+                snoozedCount: listed.snoozed,
+                isCalm: report.findings.isEmpty,
                 isRunning: isRunning,
                 onAction: { request($0, culpritLabel: nil) },
                 onSnooze: { appState.snooze(rule: $0, for: $1) }

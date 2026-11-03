@@ -48,7 +48,10 @@ struct HistoryChart: View {
         .chartXAxis { AxisMarks(values: .automatic(desiredCount: 4)) }
         .frame(height: 120)
         .onChange(of: selectedDate) { _, date in
-            guard let date else { return }
+            guard let date else {
+                selectedIndex = nil
+                return
+            }
             selectedIndex = samples.indices.min {
                 abs(samples[$0].timestamp.timeIntervalSince(date)) < abs(samples[$1].timestamp.timeIntervalSince(date))
             }
