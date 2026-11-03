@@ -10,7 +10,8 @@ struct SeverityBadge: View {
     private var color: Color {
         switch severity {
         case .info: return .blue
-        case .warn: return .yellow
+        // Plain yellow fails text contrast in light mode, the same reason TrafficLight uses orange.
+        case .warn: return .orange
         case .critical: return .red
         }
     }

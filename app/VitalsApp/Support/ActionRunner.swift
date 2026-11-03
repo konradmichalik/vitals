@@ -28,6 +28,17 @@ enum ActionRunnerError: Error, Equatable {
     }
 }
 
+extension ActionRunnerError {
+    /// The log is persisted, and the CLI output can carry pids, targets and paths, so it gets fixed text.
+    var activityNote: String {
+        switch self {
+        case .vitalsNotFound: return "Could not find vitals"
+        case .launchFailed: return "Could not launch vitals"
+        case .nonZeroExit: return "Action failed"
+        }
+    }
+}
+
 enum ActionRunner {
     /// Homebrew's two install locations stay ahead of PATH: PATH is
     /// searched as a fallback for non-standard installs, but letting it
@@ -53,12 +64,21 @@ enum ActionRunner {
     /// CLI actions at all (`list_running_projects`, `list_with_age` —
     /// informational-only per §9's design), or that need a target this
     /// app has no safe way to determine from a `Finding` alone
-    /// (`stop_project`, `kill_session`). Only the target-less real CLI
-    /// actions get a "Run" button; everything else is shown as plain text.
+    /// (`stop_project`, `start_project`, `kill_process`). Only the target-less
+    /// real CLI actions get a "Run" button; everything else is shown as plain text.
     static let runnableActions: Set<String> = [
         "poweroff", "stop_backup", "add_exclusions", "kill_orphaned_agents",
         "prune_docker_images", "kill_runaway_processes",
     ]
+
+    private static let targetedActions: Set<String> = ["stop_project", "start_project", "kill_process"]
+
+    static func isRunnable(_ action: SuggestedAction) -> Bool {
+        if targetedActions.contains(action.action) {
+            return action.target != nil
+        }
+        return runnableActions.contains(action.action)
+    }
 
     static func buildArguments(action: String, target: String?) -> [String] {
         var args = ["--fix", action, "--yes"]
@@ -73,6 +93,11 @@ enum ActionRunner {
         fileExists: (String) -> Bool = { FileManager.default.isExecutableFile(atPath: $0) }
     ) -> String? {
         candidates.first(where: fileExists)
+    }
+
+    @discardableResult
+    static func run(_ action: SuggestedAction) -> Result<String, ActionRunnerError> {
+        run(action: action.action, target: action.target)
     }
 
     @discardableResult
@@ -91,12 +116,13 @@ enum ActionRunner {
 
         do {
             try process.run()
-            process.waitUntilExit()
         } catch {
             return .failure(.launchFailed(error.localizedDescription))
         }
 
+        // Drain before waiting: a child that fills the pipe buffer blocks until someone reads.
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
         let output = String(data: data, encoding: .utf8) ?? ""
 
         if process.terminationStatus == 0 {

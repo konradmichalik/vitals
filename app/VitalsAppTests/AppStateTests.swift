@@ -22,10 +22,12 @@ final class AppStateTests: XCTestCase {
                 cpu: CpuUsage(userPercent: 10, systemPercent: 5, idlePercent: 85)
             ),
             timeMachine: TimeMachineInfo(running: false, phase: nil, changedItemCount: nil, exclusions: []),
-            ddev: DdevInfo(running: [], problems: [], pausedCount: 0, stoppedCount: 0),
+            ddev: DdevInfo(running: [], problems: [], pausedCount: 0, stoppedCount: 0, projects: []),
             docker: DockerInfo(containers: []),
-            processes: ProcessesInfo(claudeSessions: [], acpAgents: [], orbstack: nil, topByCpu: []),
-            findings: findings
+            processes: ProcessesInfo(claudeSessions: [], acpAgents: [], orbstack: nil, topByCpu: [], topByMemory: []),
+            findings: findings,
+            consumers: [],
+            verdict: Verdict(severity: nil, headline: "All calm", detail: "", culprit: nil, action: nil)
         )
     }
 

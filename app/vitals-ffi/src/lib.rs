@@ -47,6 +47,7 @@ fn collect_json() -> String {
     match vitals_core::report::collect(&config) {
         Ok((mut report, processes)) => {
             report.findings = vitals_core::rules::evaluate(&report, &processes, &config);
+            report.verdict = vitals_core::verdict::derive(&report, &processes, &config);
             serde_json::to_string(&report).unwrap_or_else(|err| error_json(&err.to_string()))
         }
         Err(err) => error_json(&err.to_string()),

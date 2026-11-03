@@ -2,7 +2,7 @@ use std::io::{IsTerminal, Write};
 use std::process::ExitCode;
 
 use clap::Parser;
-use vitals_core::actions::Action;
+use vitals_core::actions::{parse_process_target, verify_identity, Action};
 use vitals_core::config::Config;
 use vitals_core::probes::processes::ProcessEntry;
 use vitals_core::types::{Finding, Severity, VitalsReport};
@@ -19,13 +19,13 @@ struct Cli {
     #[arg(long)]
     no_color: bool,
 
-    /// Apply a remediation action: poweroff, stop_project, stop_backup,
-    /// add_exclusions, kill_orphaned_agents, kill_runaway_processes,
-    /// kill_session, prune_docker_images
+    /// Apply a remediation action: poweroff, stop_project, start_project,
+    /// stop_backup, add_exclusions, kill_orphaned_agents, kill_runaway_processes,
+    /// kill_process, prune_docker_images
     #[arg(long, value_name = "ACTION")]
     fix: Option<String>,
 
-    /// Target for actions that need one (a DDEV project name or a PID)
+    /// Target for actions that need one (a DDEV project name, or `<pid>@<started_at>` for kill_process)
     #[arg(long, value_name = "VALUE")]
     target: Option<String>,
 
@@ -66,6 +66,7 @@ fn main() -> ExitCode {
     match vitals_core::report::collect(&config) {
         Ok((mut report, processes)) => {
             report.findings = vitals_core::rules::evaluate(&report, &processes, &config);
+            report.verdict = vitals_core::verdict::derive(&report, &processes, &config);
             if cli.json {
                 println!(
                     "{}",
@@ -94,16 +95,26 @@ fn run_fix(
 ) -> ExitCode {
     let needs_process_snapshot =
         action_name == "kill_orphaned_agents" || action_name == "kill_runaway_processes";
-    let (report, processes) = if needs_process_snapshot {
+    let (report, processes, now) = if action_name == "kill_process" {
+        // A bare process list is enough here, and `now` must sit right next to
+        // it: a full collect can take seconds and would skew the identity check.
+        match vitals_core::probes::processes::list() {
+            Ok(processes) => (None, Some(processes), vitals_core::report::unix_now()),
+            Err(err) => {
+                report_error(&err, json, use_color);
+                return ExitCode::FAILURE;
+            }
+        }
+    } else if needs_process_snapshot {
         match vitals_core::report::collect(config) {
-            Ok((report, processes)) => (Some(report), Some(processes)),
+            Ok((report, processes)) => (Some(report), Some(processes), 0),
             Err(err) => {
                 report_error(&err, json, use_color);
                 return ExitCode::FAILURE;
             }
         }
     } else {
-        (None, None)
+        (None, None, 0)
     };
 
     let action = match build_action(
@@ -112,6 +123,7 @@ fn run_fix(
         report.as_ref(),
         processes.as_deref(),
         config,
+        now,
     ) {
         Ok(action) => action,
         Err(message) => {
@@ -156,16 +168,27 @@ fn confirm(action: &Action) -> bool {
     matches!(input.trim().to_lowercase().as_str(), "y" | "yes")
 }
 
-/// `report`/`processes` are only needed by `kill_orphaned_agents`/
-/// `kill_runaway_processes` — callers should skip the (expensive,
-/// DDEV-touching) `collect()` call entirely for every other action rather
-/// than fetch a report that will go unused.
+/// ddev would read a leading dash as a flag, and `--yes` skips the prompt that would show it.
+fn project_name(name: &str) -> Result<&str, String> {
+    if name.is_empty() || name.starts_with('-') {
+        return Err(format!("`{name}` is not a valid ddev project name"));
+    }
+    Ok(name)
+}
+
+/// Turns the action name and target into an `Action`, failing early with a
+/// readable message. `report` is only needed by `kill_orphaned_agents`,
+/// `processes` by `kill_runaway_processes` and `kill_process`; every other
+/// action should skip the expensive, DDEV-touching `collect()`. `now` is the
+/// Unix time taken right after the process list, used only by `kill_process`
+/// to verify the target's identity and the kill guard before the prompt.
 fn build_action(
     name: &str,
     target: Option<&str>,
     report: Option<&VitalsReport>,
     processes: Option<&[ProcessEntry]>,
     config: &Config,
+    now: u64,
 ) -> Result<Action, String> {
     match name {
         "poweroff" => Ok(Action::Poweroff),
@@ -210,14 +233,19 @@ fn build_action(
         }
         "stop_project" => {
             let name = target.ok_or("`stop_project` requires --target <project-name>")?;
-            Ok(Action::StopProject(name.to_string()))
+            Ok(Action::StopProject(project_name(name)?.to_string()))
         }
-        "kill_session" => {
-            let pid = target.ok_or("`kill_session` requires --target <pid>")?;
-            let pid: u32 = pid
-                .parse()
-                .map_err(|_| format!("`{pid}` is not a valid PID"))?;
-            Ok(Action::KillSession(pid))
+        "start_project" => {
+            let name = target.ok_or("`start_project` requires --target <project-name>")?;
+            Ok(Action::StartProject(project_name(name)?.to_string()))
+        }
+        "kill_process" => {
+            let target = target.ok_or("`kill_process` requires --target <pid>@<started_at>")?;
+            let processes =
+                processes.ok_or("internal error: no process list collected for kill_process")?;
+            let (pid, started_at) = parse_process_target(target)?;
+            verify_identity(pid, started_at, processes, now)?;
+            Ok(Action::KillProcess { pid, started_at })
         }
         "prune_docker_images" => Ok(Action::PruneDockerImages),
         other => Err(format!(
@@ -239,6 +267,8 @@ fn format_tty(report: &VitalsReport, use_color: bool) -> String {
     let mut out = String::new();
     let system = &report.system;
 
+    out.push_str(&format_verdict(&report.verdict, use_color));
+    out.push('\n');
     out.push_str(&format!(
         "load     {:.2} {:.2} {:.2}  ({}P {}E, {} total)\n",
         system.load.m1,
@@ -334,6 +364,24 @@ fn format_tty(report: &VitalsReport, use_color: bool) -> String {
     out
 }
 
+fn format_verdict(verdict: &vitals_core::verdict::Verdict, use_color: bool) -> String {
+    let headline = if use_color {
+        let code = match verdict.severity {
+            Some(Severity::Critical) => "31",
+            Some(Severity::Warn) => "33",
+            _ => "32",
+        };
+        format!("\x1b[1;{code}m{}\x1b[0m", verdict.headline)
+    } else {
+        verdict.headline.clone()
+    };
+    if verdict.detail.is_empty() {
+        format!("{headline}\n")
+    } else {
+        format!("{headline}  {}\n", verdict.detail)
+    }
+}
+
 fn report_error(err: &vitals_core::VitalsError, json: bool, use_color: bool) {
     if json {
         let payload = serde_json::json!({ "schemaVersion": vitals_core::types::SCHEMA_VERSION, "error": err.to_string() });
@@ -406,6 +454,8 @@ mod tests {
             docker: DockerInfo::default(),
             processes: ProcessesInfo::default(),
             findings,
+            consumers: Vec::new(),
+            verdict: vitals_core::verdict::Verdict::calm(),
         }
     }
 
@@ -447,6 +497,15 @@ mod tests {
                 finding("container_load", Severity::Critical),
             ]),
             2
+        );
+    }
+
+    #[test]
+    fn tty_report_starts_with_verdict() {
+        let text = format_tty(&sample_report(Vec::new()), false);
+        assert_eq!(
+            text.lines().next(),
+            Some("All calm  Nothing is slowing your Mac down.")
         );
     }
 
@@ -506,7 +565,7 @@ mod tests {
     fn build_action_poweroff_needs_no_target_or_report() {
         let config = Config::default();
         assert_eq!(
-            build_action("poweroff", None, None, None, &config).unwrap(),
+            build_action("poweroff", None, None, None, &config, 0).unwrap(),
             Action::Poweroff
         );
     }
@@ -515,7 +574,7 @@ mod tests {
     fn build_action_stop_backup_needs_no_target_or_report() {
         let config = Config::default();
         assert_eq!(
-            build_action("stop_backup", None, None, None, &config).unwrap(),
+            build_action("stop_backup", None, None, None, &config, 0).unwrap(),
             Action::StopBackup
         );
     }
@@ -525,7 +584,7 @@ mod tests {
         let mut config = Config::default();
         config.watch.timemachine_exclusions = vec!["~/.orbstack".to_string()];
         assert_eq!(
-            build_action("add_exclusions", None, None, None, &config).unwrap(),
+            build_action("add_exclusions", None, None, None, &config, 0).unwrap(),
             Action::AddExclusions(vec!["~/.orbstack".to_string()])
         );
     }
@@ -533,7 +592,7 @@ mod tests {
     #[test]
     fn build_action_add_exclusions_errors_when_none_configured() {
         let config = Config::default();
-        assert!(build_action("add_exclusions", None, None, None, &config).is_err());
+        assert!(build_action("add_exclusions", None, None, None, &config, 0).is_err());
     }
 
     #[test]
@@ -555,7 +614,15 @@ mod tests {
         ];
         let config = Config::default();
         assert_eq!(
-            build_action("kill_orphaned_agents", None, Some(&report), None, &config).unwrap(),
+            build_action(
+                "kill_orphaned_agents",
+                None,
+                Some(&report),
+                None,
+                &config,
+                0
+            )
+            .unwrap(),
             Action::KillOrphanedAgents(vec![1])
         );
     }
@@ -564,13 +631,21 @@ mod tests {
     fn build_action_kill_orphaned_agents_errors_when_none_found() {
         let report = sample_report(Vec::new());
         let config = Config::default();
-        assert!(build_action("kill_orphaned_agents", None, Some(&report), None, &config).is_err());
+        assert!(build_action(
+            "kill_orphaned_agents",
+            None,
+            Some(&report),
+            None,
+            &config,
+            0
+        )
+        .is_err());
     }
 
     #[test]
     fn build_action_kill_orphaned_agents_errors_without_a_report() {
         let config = Config::default();
-        assert!(build_action("kill_orphaned_agents", None, None, None, &config).is_err());
+        assert!(build_action("kill_orphaned_agents", None, None, None, &config, 0).is_err());
     }
 
     fn sample_process(pid: u32, cpu_percent: f64, etime_seconds: u64) -> ProcessEntry {
@@ -598,7 +673,8 @@ mod tests {
                 None,
                 None,
                 Some(&processes),
-                &config
+                &config,
+                0
             )
             .unwrap(),
             Action::KillRunawayProcesses(vec![4242])
@@ -614,7 +690,8 @@ mod tests {
             None,
             None,
             Some(&processes),
-            &config
+            &config,
+            0
         )
         .is_err());
     }
@@ -622,40 +699,102 @@ mod tests {
     #[test]
     fn build_action_kill_runaway_processes_errors_without_a_process_list() {
         let config = Config::default();
-        assert!(build_action("kill_runaway_processes", None, None, None, &config).is_err());
+        assert!(build_action("kill_runaway_processes", None, None, None, &config, 0).is_err());
     }
 
     #[test]
     fn build_action_stop_project_requires_target() {
         let config = Config::default();
-        assert!(build_action("stop_project", None, None, None, &config).is_err());
+        assert!(build_action("stop_project", None, None, None, &config, 0).is_err());
         assert_eq!(
-            build_action("stop_project", Some("witte"), None, None, &config).unwrap(),
+            build_action("stop_project", Some("witte"), None, None, &config, 0).unwrap(),
             Action::StopProject("witte".to_string())
         );
     }
 
     #[test]
-    fn build_action_kill_session_parses_pid() {
+    fn build_action_start_project_requires_target() {
         let config = Config::default();
-        assert!(build_action("kill_session", Some("not-a-pid"), None, None, &config).is_err());
+        assert!(build_action("start_project", None, None, None, &config, 0).is_err());
         assert_eq!(
-            build_action("kill_session", Some("90548"), None, None, &config).unwrap(),
-            Action::KillSession(90548)
+            build_action("start_project", Some("witte"), None, None, &config, 0).unwrap(),
+            Action::StartProject("witte".to_string())
         );
+    }
+
+    #[test]
+    fn build_action_project_names_cannot_look_like_flags() {
+        let config = Config::default();
+        for action in ["start_project", "stop_project"] {
+            assert!(build_action(action, Some("--all"), None, None, &config, 0).is_err());
+            assert!(build_action(action, Some("-x"), None, None, &config, 0).is_err());
+            assert!(build_action(action, Some(""), None, None, &config, 0).is_err());
+        }
+    }
+
+    #[test]
+    fn build_action_kill_process_requires_target() {
+        let config = Config::default();
+        assert!(build_action("kill_process", None, None, Some(&[]), &config, 0).is_err());
+        assert!(build_action("kill_process", Some("90548"), None, Some(&[]), &config, 0).is_err());
+    }
+
+    #[test]
+    fn build_action_kill_process_verifies_identity() {
+        let config = Config::default();
+        let processes = [ProcessEntry {
+            pid: 90548,
+            ppid: 1,
+            etime_seconds: 600,
+            cpu_percent: 0.0,
+            rss_bytes: 0,
+            comm: "node".to_string(),
+            command: "node".to_string(),
+        }];
+        assert_eq!(
+            build_action(
+                "kill_process",
+                Some("90548@999400"),
+                None,
+                Some(&processes),
+                &config,
+                1_000_000
+            )
+            .unwrap(),
+            Action::KillProcess {
+                pid: 90548,
+                started_at: 999_400
+            }
+        );
+        assert!(build_action(
+            "kill_process",
+            Some("90548@999000"),
+            None,
+            Some(&processes),
+            &config,
+            1_000_000
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn build_action_kill_session_is_unknown() {
+        let config = Config::default();
+        let err = build_action("kill_session", Some("90548"), None, None, &config, 0).unwrap_err();
+        assert!(err.contains("unknown action"));
     }
 
     #[test]
     fn build_action_rejects_unknown_action() {
         let config = Config::default();
-        assert!(build_action("launch_the_missiles", None, None, None, &config).is_err());
+        assert!(build_action("launch_the_missiles", None, None, None, &config, 0).is_err());
     }
 
     #[test]
     fn build_action_prune_docker_images_needs_no_target_or_report() {
         let config = Config::default();
         assert_eq!(
-            build_action("prune_docker_images", None, None, None, &config).unwrap(),
+            build_action("prune_docker_images", None, None, None, &config, 0).unwrap(),
             Action::PruneDockerImages
         );
     }

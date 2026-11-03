@@ -1,16 +1,11 @@
 import Charts
 import SwiftUI
 
-/// Shared by `Sparkline` and `DualSparkline` — every line in either
-/// chart uses the same weight/cap/join, so both charts stay visually
-/// consistent as a pair.
 private let sparklineLineStyle = StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round)
 
 private extension View {
-    /// The chart-frame chrome both `Sparkline` and `DualSparkline` share
-    /// — no axes/legend, and a domain that doesn't force 0 as the floor
-    /// so small fluctuations in a narrow band (e.g. RAM hovering around
-    /// 80%) are still visible as a real trend, not a near-flat line.
+    /// A domain that does not force 0 as the floor keeps small fluctuations
+    /// in a narrow band (RAM hovering around 80%) visible as a trend.
     func sparklineChartStyle() -> some View {
         chartXAxis(.hidden)
             .chartYAxis(.hidden)
@@ -19,19 +14,9 @@ private extension View {
     }
 }
 
-/// Compact, axis-less recent-trend line — a glance-only companion to the
-/// numeric value next to it, not a standalone chart with its own labels.
-/// Hovering reveals what a point actually means via `tooltip`, rather
-/// than ambient per-point markers: a marker on every sample that's
-/// currently in a sustained state (the common case) reads as visual
-/// noise indistinguishable from an isolated spike, and nothing explains
-/// what it means without already knowing the convention.
-///
-/// The hover indicator is drawn as a plain overlay positioned via
-/// `proxy.position(forX:forY:)`, never as extra marks inside `Chart`
-/// itself — conditionally adding marks there made `.chartYScale`
-/// recompute the plot's domain between hovered/not-hovered, which
-/// visibly shifted the whole line on every hover start/end.
+/// Compact, axis-less trend line next to a numeric value; hovering explains a point through `tooltip`.
+/// The hover indicator is an overlay placed with `proxy.position(forX:forY:)`, not a mark inside `Chart`:
+/// conditional marks made `.chartYScale` recompute its domain and shifted the whole line on every hover.
 struct Sparkline: View {
     let values: [Double]
     let color: Color
@@ -51,79 +36,23 @@ struct Sparkline: View {
         .sparklineChartStyle()
         .chartOverlay { proxy in
             SparklineHoverOverlay(proxy: proxy, sampleCount: values.count, hoveredIndex: $hoveredIndex) { index in
-                guard let y = proxy.position(forY: values[index]) else { return nil }
+                guard values.indices.contains(index), let y = proxy.position(forY: values[index]) else { return nil }
                 return SparklineIndicator(points: [IndicatorPoint(y: y, color: color)], tooltip: tooltip(index))
             }
         }
         .frame(maxWidth: .infinity)
         .frame(height: 24)
+        // The window shrinks as samples age out, and the pointer may rest without moving.
+        .onChange(of: values.count) { hoveredIndex = nil }
     }
 }
 
-/// Two related percentage series sharing one axis (CPU and memory both
-/// being 0–100 already makes a shared scale meaningful, unlike load —
-/// see `Sparkline`), so they fit in the vertical space one chart needs
-/// instead of two.
-///
-/// Uses the categorical `foregroundStyle(by:)` + `chartForegroundStyleScale`
-/// pattern over one unified `Chart(data:)` data source, rather than two
-/// separate `ForEach` blocks each with their own manual `.foregroundStyle`
-/// — the manual version produced visible rendering artifacts (a spurious
-/// extra line, colors not applying) despite giving each series its own
-/// unique mark identities. This categorical form is Charts' own supported
-/// way to draw multiple distinctly colored lines and doesn't have that
-/// problem.
-struct DualSparkline: View {
-    let primaryValues: [Double]
-    let primaryColor: Color
-    let secondaryValues: [Double]
-    let secondaryColor: Color
-    let tooltip: (Int) -> String
-
-    @State private var hoveredIndex: Int?
-
-    private static let primarySeries = "primary"
-    private static let secondarySeries = "secondary"
-
-    private var points: [SeriesPoint] {
-        let primary = primaryValues.enumerated().map {
-            SeriesPoint(id: "p-\($0.offset)", index: $0.offset, value: $0.element, series: Self.primarySeries)
-        }
-        let secondary = secondaryValues.enumerated().map {
-            SeriesPoint(id: "s-\($0.offset)", index: $0.offset, value: $0.element, series: Self.secondarySeries)
-        }
-        return primary + secondary
+enum SparklineHover {
+    /// A stored hover index survives re-renders, so it is only usable while it still points into the current values.
+    static func validIndex(_ index: Int?, count: Int) -> Int? {
+        guard let index, (0..<count).contains(index) else { return nil }
+        return index
     }
-
-    var body: some View {
-        Chart(points) { point in
-            LineMark(x: .value("Sample", point.index), y: .value("Value", point.value))
-                .foregroundStyle(by: .value("Series", point.series))
-                .interpolationMethod(.catmullRom)
-                .lineStyle(sparklineLineStyle)
-        }
-        .chartForegroundStyleScale([Self.primarySeries: primaryColor, Self.secondarySeries: secondaryColor])
-        .sparklineChartStyle()
-        .chartOverlay { proxy in
-            SparklineHoverOverlay(proxy: proxy, sampleCount: secondaryValues.count, hoveredIndex: $hoveredIndex) { index in
-                guard let secondaryY = proxy.position(forY: secondaryValues[index]) else { return nil }
-                var indicatorPoints = [IndicatorPoint(y: secondaryY, color: secondaryColor)]
-                if let primaryY = proxy.position(forY: primaryValues[index]) {
-                    indicatorPoints.append(IndicatorPoint(y: primaryY, color: primaryColor))
-                }
-                return SparklineIndicator(points: indicatorPoints, tooltip: tooltip(index))
-            }
-        }
-        .frame(maxWidth: .infinity)
-        .frame(height: 28)
-    }
-}
-
-private struct SeriesPoint: Identifiable {
-    let id: String
-    let index: Int
-    let value: Double
-    let series: String
 }
 
 private struct IndicatorPoint {
@@ -180,7 +109,7 @@ private struct SparklineHoverOverlay: View {
                         }
                     }
 
-                if let hoveredIndex, let plotFrame,
+                if let hoveredIndex = SparklineHover.validIndex(hoveredIndex, count: sampleCount), let plotFrame,
                    let x = proxy.position(forX: hoveredIndex),
                    let result = indicator(hoveredIndex) {
                     let originX = plotFrame.origin.x + x

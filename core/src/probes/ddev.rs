@@ -63,6 +63,10 @@ pub fn summarize(projects: &[DdevProject]) -> crate::types::DdevInfo {
     let mut info = crate::types::DdevInfo::default();
 
     for project in projects {
+        info.projects.push(crate::types::DdevProjectStatus {
+            name: project.name.clone(),
+            status: project.status.clone(),
+        });
         match project.status.as_str() {
             "running" => info.running.push(project.name.clone()),
             "stopped" => info.stopped_count += 1,
@@ -132,5 +136,16 @@ mod tests {
         assert_eq!(info.stopped_count, 1);
         assert_eq!(info.paused_count, 0);
         assert_eq!(info.problems, vec!["restarting-one".to_string()]);
+    }
+
+    #[test]
+    fn summarize_keeps_every_project_with_status() {
+        let projects = parse(FIXTURE).unwrap();
+
+        let info = summarize(&projects);
+
+        assert_eq!(info.projects.len(), 3);
+        assert_eq!(info.projects[2].name, "witte");
+        assert_eq!(info.projects[2].status, "stopped");
     }
 }

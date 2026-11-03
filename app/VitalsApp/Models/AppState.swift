@@ -10,11 +10,17 @@ final class AppState: ObservableObject {
     @Published private(set) var lastError: VitalsCollectError?
     @Published private(set) var lastUpdated: Date?
     @Published private(set) var history: [MetricSample] = []
+    @Published private(set) var outcome: ActionOutcome = .idle
+    @Published private(set) var snoozes: [Snooze] = []
+    @Published private(set) var activity: [ActivityEntry] = []
 
     @AppStorage(AppNotifier.alertStorageKey) private var notifyOnAlerts = true
     private var lastAlertSeverities: [String: Severity] = [:]
     private var lastNotifiedAt: [String: Date] = [:]
     private var pollTask: Task<Void, Never>?
+    private var previousReport: VitalsReport?
+    private var refreshOrder = RefreshOrder()
+    private var activityWrites: Task<Void, Never>?
 
     nonisolated static let greenInterval: TimeInterval = 30
     nonisolated static let alertInterval: TimeInterval = 10
@@ -24,9 +30,21 @@ final class AppState: ObservableObject {
     nonisolated static let notificationCooldown: TimeInterval = 15 * 60
 
     private let historyStore = MetricHistoryStore()
+    private let snoozeStore = SnoozeStore()
+    private let activityStore = ActivityLogStore()
 
     init() {
         history = historyStore.load()
+        snoozes = SnoozeStore.active(snoozeStore.load(), now: Date(), bootTime: SnoozeStore.currentBootTime())
+        let store = activityStore
+        Task { [weak self] in
+            let loaded = await Task.detached(priority: .utility) { store.load() }.value
+            guard let self else { return }
+            // A write may have landed before the load finished, so dedupe by id.
+            var seen = Set<UUID>()
+            let merged = (loaded + self.activity).filter { seen.insert($0.id).inserted }
+            self.activity = ActivityLogStore.pruned(merged, now: Date())
+        }
         pollTask = Task { [weak self] in
             await self?.pollLoop()
         }
@@ -36,22 +54,99 @@ final class AppState: ObservableObject {
         pollTask?.cancel()
     }
 
+    /// The traffic light and status pill keep using all findings, so a snooze never hides the dot.
+    var visibleFindings: [Finding] {
+        let now = Date()
+        let bootTime = SnoozeStore.currentBootTime()
+        return (report?.findings ?? []).filter {
+            !SnoozeStore.isSnoozed(rule: $0.rule, snoozes: snoozes, now: now, bootTime: bootTime)
+        }
+    }
+
+    func snooze(rule: String, for duration: SnoozeDuration) {
+        let entry = SnoozeStore.snooze(
+            rule: rule, for: duration, now: Date(), bootTime: SnoozeStore.currentBootTime(), calendar: .current
+        )
+        snoozes = snoozes.filter { $0.rule != rule } + [entry]
+        snoozeStore.save(snoozes)
+    }
+
+    func unsnooze(rule: String) {
+        snoozes = snoozes.filter { $0.rule != rule }
+        snoozeStore.save(snoozes)
+    }
+
+    private func pruneExpiredSnoozes() {
+        let active = SnoozeStore.active(snoozes, now: Date(), bootTime: SnoozeStore.currentBootTime())
+        guard active.count != snoozes.count else { return }
+        snoozes = active
+        snoozeStore.save(active)
+    }
+
+    func perform(_ action: SuggestedAction) {
+        // `.finished` carries no action identity, so a second run would finish the wrong one.
+        if case .running = outcome { return }
+        outcome = ActionOutcome.reduce(outcome, .started(action))
+        Task {
+            let result = await Task.detached(priority: .userInitiated) {
+                ActionRunner.run(action)
+            }.value
+            let finishedAt = Date()
+            outcome = ActionOutcome.reduce(outcome, .finished(result, at: finishedAt))
+            recordActivity([ActivityEntry.action(for: action, result: result, at: finishedAt)], now: finishedAt)
+            if case .success = result {
+                await refresh()
+            }
+        }
+    }
+
     func refresh() async {
+        let sequence = refreshOrder.begin()
+        let startedAt = Date()
         let result = await Task.detached(priority: .utility) {
             VitalsBridge.collect()
         }.value
 
+        // Refreshes overlap (poll, post-action, footer button), so one that started earlier can land last.
+        let isCurrent = refreshOrder.accept(sequence)
         switch result {
         case .success(let report):
-            self.report = report
-            self.lastError = nil
-            history = MetricHistory.appending(.from(report: report), to: history)
-            historyStore.save(history)
-            notifyAboutNewAlertingFindings(in: report.findings)
+            outcome = ActionOutcome.reduce(outcome, .reportArrived(timestamp: startedAt))
+            if isCurrent {
+                apply(report, startedAt: startedAt)
+            }
         case .failure(let error):
-            self.lastError = error
+            if isCurrent {
+                lastError = error
+            }
         }
-        lastUpdated = Date()
+        let now = Date()
+        lastUpdated = now
+        outcome = ActionOutcome.reduce(outcome, .tick(now: now))
+    }
+
+    private func apply(_ report: VitalsReport, startedAt: Date) {
+        self.report = report
+        lastError = nil
+        pruneExpiredSnoozes()
+        history = MetricHistory.appending(.from(report: report), to: history)
+        historyStore.save(history)
+        notifyAboutNewAlertingFindings(in: report.findings)
+        let events = ReportDiff.events(previous: previousReport, current: report, at: startedAt)
+        previousReport = report
+        recordActivity(events, now: startedAt)
+    }
+
+    /// Writes are chained so two quick appends cannot read the same file and drop one.
+    private func recordActivity(_ entries: [ActivityEntry], now: Date) {
+        guard !entries.isEmpty else { return }
+        activity = ActivityLogStore.pruned(activity + entries, now: now)
+        let store = activityStore
+        let previous = activityWrites
+        activityWrites = Task.detached(priority: .utility) {
+            await previous?.value
+            store.append(entries, now: now)
+        }
     }
 
     /// `lastAlertSeverities` is updated unconditionally, even with
@@ -68,7 +163,10 @@ final class AppState: ObservableObject {
 
         guard notifyOnAlerts else { return }
         let now = Date()
+        if UserDefaults.standard.bool(forKey: QuietHours.storageKey), QuietHours.isQuiet(now) { return }
+        let bootTime = SnoozeStore.currentBootTime()
         for rule in newlyAlerting {
+            guard !SnoozeStore.isSnoozed(rule: rule, snoozes: snoozes, now: now, bootTime: bootTime) else { continue }
             guard let finding = findings.first(where: { $0.rule == rule }) else { continue }
             guard FindingAlertTransition.shouldNotify(
                 rule: rule, now: now, lastNotifiedAt: lastNotifiedAt, cooldown: Self.notificationCooldown
@@ -77,7 +175,7 @@ final class AppState: ObservableObject {
 
             let isCritical = finding.severity == .critical
             let title = isCritical ? "Vitals — critical" : "Vitals — warning"
-            AppNotifier.notify(id: rule, title: title, body: finding.message, kind: isCritical ? .critical : .warning)
+            AppNotifier.notify(id: rule, title: title, body: finding.message, kind: isCritical ? .critical : .warning, rule: rule)
         }
     }
 

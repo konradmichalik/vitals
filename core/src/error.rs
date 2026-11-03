@@ -30,6 +30,9 @@ pub enum VitalsError {
 
     #[error("`{command}` did not finish within {seconds}s")]
     Timeout { command: String, seconds: u64 },
+
+    #[error("{0}")]
+    Refused(String),
 }
 
 impl VitalsError {

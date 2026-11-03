@@ -10,10 +10,10 @@ Vitals is a macOS tool that correlates system metrics with the local dev toolcha
 
 ## Structure
 
-- `core/`: `vitals-core` crate. `probes/` (one module per data source), `rules.rs` (rule engine), `actions.rs` (`Action` enum, `--fix` targets), `config.rs` (`~/.vitals.toml`), `types.rs` (JSON contract), `report.rs`
+- `core/`: `vitals-core` crate. `probes/` (one module per data source), `rules.rs` (rule engine), `consumers.rs` (top consumers), `verdict.rs` (headline verdict), `actions.rs` (`Action` enum, `--fix` targets), `config.rs` (`~/.vitals.toml`), `types.rs` (JSON contract), `report.rs`
 - `cli/`: the `vitals` binary. Flag parsing, confirmation prompts and output formatting only, no probe logic
 - `app/vitals-ffi/`: root workspace member, C ABI (`vitals_collect`, `vitals_free_string`) linking `vitals-core` directly
-- `app/VitalsApp/`: SwiftUI target (`Bridge/`, `Models/`, `Support/`, `Views/`)
+- `app/VitalsApp/`: SwiftUI target (`Bridge/`, `Models/`, `Support/`, `Views/` with `Overview/`, `Detail/`, `Toolchain/`)
 - `app/VitalsAppTests/`: XCTest target
 - `app/project.yml`: XcodeGen source of truth, never hand-edit `VitalsApp.xcodeproj`
 - `docs/DEVELOPMENT.md`: deeper notes on probes, rules, actions, JSON contract and app signing

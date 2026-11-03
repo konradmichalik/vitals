@@ -60,4 +60,9 @@ final class TrafficLightTests: XCTestCase {
     func testStatusLabelForMultipleFindingsIsPlural() {
         XCTAssertEqual(TrafficLight.statusLabel(for: [finding(.warn), finding(.info)]), "2 findings")
     }
+
+    func testRedBadgeIsSquare() {
+        XCTAssertEqual(TrafficLight.badgeCornerRadius(for: .red, diameter: 6), 1.5)
+        XCTAssertEqual(TrafficLight.badgeCornerRadius(for: .yellow, diameter: 6), 3)
+    }
 }
