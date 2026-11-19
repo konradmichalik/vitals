@@ -119,19 +119,34 @@ fn app_name(comm: &str) -> Option<&str> {
     Some(&comm[start..end])
 }
 
-fn is_system_path(comm: &str) -> bool {
-    !comm.starts_with('/')
-        || [
-            "/System/",
-            "/usr/",
-            "/sbin/",
-            "/bin/",
-            "/Library/Apple/",
-            "/private/",
-        ]
-        .iter()
-        .any(|prefix| comm.starts_with(prefix))
-            && !comm.starts_with("/System/Applications/")
+fn is_system_path(path: &str) -> bool {
+    let system = [
+        "/System/",
+        "/usr/",
+        "/sbin/",
+        "/bin/",
+        "/Library/Apple/",
+        "/private/",
+    ]
+    .iter()
+    .any(|prefix| path.starts_with(prefix));
+    system && !path.starts_with("/System/Applications/")
+}
+
+/// Kernel threads report a bare name and no path at all.
+const BARE_SYSTEM: &[&str] = &["kernel_task", "launchd"];
+
+/// `comm` is usually the absolute executable path, but some processes set
+/// a bare display name (Claude Code shows `claude`, interpreters show
+/// `node`). For those the full command line is the better hint.
+fn effective_path(p: &ProcessEntry) -> &str {
+    if p.comm.starts_with('/') {
+        &p.comm
+    } else if p.command.starts_with('/') {
+        &p.command
+    } else {
+        &p.comm
+    }
 }
 
 pub fn groups(inputs: &Inputs) -> Vec<ConsumerGroup> {
@@ -435,12 +450,13 @@ fn apps_and_system(
         .iter()
         .filter(|p| !claimed.contains(&p.pid))
     {
-        if let Some(name) = app_name(&p.comm).filter(|_| !p.comm.starts_with("/System/Library/")) {
+        let path = effective_path(p);
+        if let Some(name) = app_name(path).filter(|_| !path.starts_with("/System/Library/")) {
             let entry = apps.entry(name.to_string()).or_insert((0, 0.0, 0, true));
             entry.0 += p.rss_bytes;
             entry.1 += p.cpu_percent;
             entry.2 += 1;
-        } else if is_system_path(&p.comm) {
+        } else if is_system_path(path) || BARE_SYSTEM.contains(&p.comm.as_str()) {
             sys_mem += p.rss_bytes;
             sys_cpu += p.cpu_percent;
         } else {
@@ -641,10 +657,11 @@ pub fn quick_wins(
             .collect();
         other_wins.push(QuickWin {
             id: "quit_runaway".to_string(),
-            title: format!(
-                "Quit {}",
-                plural(runaway.len(), "runaway process").replace("processs", "processes")
-            ),
+            title: if runaway.len() == 1 {
+                "Quit 1 runaway process".to_string()
+            } else {
+                format!("Quit {} runaway processes", runaway.len())
+            },
             detail: format!("{} · asks first", names.join(", ")),
             reclaimable_bytes: 0,
             action: "kill_runaway_processes".to_string(),
@@ -775,6 +792,8 @@ mod tests {
             p(600, 1, "/Applications/OrbStack.app/Contents/Frameworks/OrbStack Helper.app/Contents/MacOS/OrbStack Helper", 5000, 30.0),
             p(700, 1, "/Applications/Slack.app/Contents/MacOS/Slack", 600, 1.0),
             p(800, 300, "/opt/homebrew/bin/node", 900, 80.0),
+            p(900, 1, "python3", 120, 0.0),
+            p(901, 0, "kernel_task", 0, 3.0),
         ];
         let sessions = vec![
             session(301, "/Users/km/Sites/vitals", Some(600), 500),
@@ -905,6 +924,8 @@ mod tests {
         assert!(warp.action.is_none());
         let slack = apps.items.iter().find(|i| i.name == "Slack").unwrap();
         assert_eq!(slack.action.as_ref().map(|a| a.confirm), Some(true));
+        let python = apps.items.iter().find(|i| i.name == "python3").unwrap();
+        assert_eq!(python.detail, "command line");
         let node = apps.items.iter().find(|i| i.name == "node").unwrap();
         assert_eq!(node.detail, "command line");
         assert!(node.action.is_none());

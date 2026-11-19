@@ -14,7 +14,10 @@
 //! The directory may not be readable for every user; that degrades to
 //! "no incidents", never an error.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
+use std::time::SystemTime;
 
 use serde_json::Value;
 
@@ -23,14 +26,14 @@ use crate::types::{Incident, IncidentProcess};
 const DIRECTORIES: &[&str] = &["/Library/Logs/DiagnosticReports"];
 const TOP_PROCESSES: usize = 5;
 
-pub fn recent(max_age_days: u64, limit: usize, now: std::time::SystemTime) -> Vec<Incident> {
+pub fn recent(max_age_days: u64, limit: usize, now: SystemTime) -> Vec<Incident> {
     let mut dirs: Vec<PathBuf> = DIRECTORIES.iter().map(PathBuf::from).collect();
     if let Ok(home) = std::env::var("HOME") {
         dirs.push(PathBuf::from(home).join("Library/Logs/DiagnosticReports"));
     }
 
     let max_age = std::time::Duration::from_secs(max_age_days * 86400);
-    let mut files: Vec<(std::time::SystemTime, PathBuf)> = dirs
+    let mut files: Vec<(SystemTime, PathBuf)> = dirs
         .iter()
         .filter_map(|dir| std::fs::read_dir(dir).ok())
         .flatten()
@@ -49,11 +52,32 @@ pub fn recent(max_age_days: u64, limit: usize, now: std::time::SystemTime) -> Ve
     files
         .into_iter()
         .take(limit)
-        .filter_map(|(_, path)| {
-            let raw = std::fs::read_to_string(&path).ok()?;
-            parse(&raw, &path.file_name()?.to_string_lossy())
-        })
+        .filter_map(|(mtime, path)| cached_parse(&path, mtime))
         .collect()
+}
+
+type Cache = HashMap<PathBuf, (SystemTime, Option<Incident>)>;
+
+/// Reports are written once and never change, but the menubar app polls
+/// every few seconds and a report lists every process on the machine.
+/// Parsing each file once per process lifetime keeps polling cheap.
+fn cached_parse(path: &Path, mtime: SystemTime) -> Option<Incident> {
+    static CACHE: OnceLock<Mutex<Cache>> = OnceLock::new();
+    let cache = CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Ok(guard) = cache.lock() {
+        if let Some((cached_mtime, incident)) = guard.get(path) {
+            if *cached_mtime == mtime {
+                return incident.clone();
+            }
+        }
+    }
+    let incident = std::fs::read_to_string(path)
+        .ok()
+        .and_then(|raw| parse(&raw, &path.file_name()?.to_string_lossy()));
+    if let Ok(mut guard) = cache.lock() {
+        guard.insert(path.to_path_buf(), (mtime, incident.clone()));
+    }
+    incident
 }
 
 fn is_jetsam_report(path: &Path) -> bool {
