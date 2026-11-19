@@ -5,8 +5,10 @@
 //! against.
 
 pub mod actions;
+pub mod activity;
 pub mod classify;
 pub mod config;
+pub mod consumers;
 pub mod error;
 pub mod probes;
 pub mod report;

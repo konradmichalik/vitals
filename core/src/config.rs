@@ -15,6 +15,73 @@ pub struct Config {
     pub thresholds: Thresholds,
     pub actions: ActionsConfig,
     pub rules: RulesConfig,
+    pub idle: IdleConfig,
+}
+
+/// What counts as "idle" — the basis for the quick wins and for
+/// `--fix free_idle`. Nothing here is a fact macOS reports: it is the
+/// policy for when an item may be freed without asking.
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct IdleConfig {
+    /// How long a DDEV project or Claude session must have shown no
+    /// activity before it counts as idle.
+    pub after_minutes: f64,
+    /// Combined container CPU below which a DDEV project shows no activity
+    /// in a sample. Idle databases and web servers still tick over at a
+    /// fraction of a percent, so this cannot be zero.
+    pub ddev_cpu_percent: f64,
+    /// DDEV project names or session working directories that are never
+    /// offered for freeing, however long they have been quiet.
+    pub protected: Vec<String>,
+}
+
+impl Default for IdleConfig {
+    fn default() -> Self {
+        Self {
+            after_minutes: 120.0,
+            ddev_cpu_percent: 2.0,
+            protected: Vec::new(),
+        }
+    }
+}
+
+/// Values the menubar app (or CLI flags) lay over the TOML file, so the
+/// app can keep its own settings without ever writing the user's
+/// hand-edited config back out.
+#[derive(Debug, Clone, Default, Deserialize, PartialEq)]
+#[serde(default, rename_all = "camelCase")]
+pub struct Overrides {
+    pub idle_after_minutes: Option<f64>,
+    pub protected: Option<Vec<String>>,
+}
+
+impl Config {
+    pub fn with_overrides(mut self, overrides: &Overrides) -> Self {
+        if let Some(minutes) = overrides.idle_after_minutes {
+            if minutes > 0.0 {
+                self.idle.after_minutes = minutes;
+            }
+        }
+        if let Some(protected) = &overrides.protected {
+            self.idle.protected = protected.clone();
+        }
+        self
+    }
+
+    /// Protected entries match a DDEV project by name, or a session by
+    /// its working directory. A leading `~` is expanded against `home`,
+    /// since that is how people write paths in a config file.
+    pub fn is_protected(&self, candidate: &str, home: Option<&str>) -> bool {
+        self.idle.protected.iter().any(|entry| {
+            let expanded = match (entry.strip_prefix('~'), home) {
+                (Some(rest), Some(home)) => format!("{home}{rest}"),
+                _ => entry.clone(),
+            };
+            let expanded = expanded.trim_end_matches('/');
+            !expanded.is_empty() && expanded == candidate.trim_end_matches('/')
+        })
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Default, PartialEq)]
@@ -233,6 +300,57 @@ retired_versions = ["PhpStorm2025.3"]
         );
         assert_eq!(config.thresholds, Thresholds::default());
         assert!(config.watch.timemachine_exclusions.is_empty());
+    }
+
+    #[test]
+    fn parses_idle_section() {
+        let toml_str = r#"
+[idle]
+after_minutes = 60
+protected = ["witte", "~/Sites/vitals"]
+"#;
+        let config = parse(toml_str, Path::new("test.toml")).unwrap();
+        assert_eq!(config.idle.after_minutes, 60.0);
+        assert_eq!(
+            config.idle.ddev_cpu_percent,
+            IdleConfig::default().ddev_cpu_percent
+        );
+        assert_eq!(config.idle.protected, vec!["witte", "~/Sites/vitals"]);
+    }
+
+    #[test]
+    fn overrides_replace_idle_settings_but_ignore_nonsense_minutes() {
+        let overrides = Overrides {
+            idle_after_minutes: Some(0.0),
+            protected: Some(vec!["verdi".to_string()]),
+        };
+        let config = Config::default().with_overrides(&overrides);
+        assert_eq!(config.idle.after_minutes, 120.0);
+        assert_eq!(config.idle.protected, vec!["verdi"]);
+
+        let config = Config::default().with_overrides(&Overrides {
+            idle_after_minutes: Some(30.0),
+            protected: None,
+        });
+        assert_eq!(config.idle.after_minutes, 30.0);
+    }
+
+    #[test]
+    fn protected_matches_names_and_home_relative_paths() {
+        let mut config = Config::default();
+        config.idle.protected = vec!["witte".to_string(), "~/Sites/vitals/".to_string()];
+        assert!(config.is_protected("witte", None));
+        assert!(config.is_protected("/Users/km/Sites/vitals", Some("/Users/km")));
+        assert!(!config.is_protected("/Users/km/Sites/vitals-old", Some("/Users/km")));
+        assert!(!config.is_protected("verdi", Some("/Users/km")));
+    }
+
+    #[test]
+    fn overrides_parse_from_camel_case_json_as_sent_by_the_app() {
+        let overrides: Overrides =
+            serde_json::from_str(r#"{"idleAfterMinutes":90,"protected":["witte"]}"#).unwrap();
+        assert_eq!(overrides.idle_after_minutes, Some(90.0));
+        assert_eq!(overrides.protected, Some(vec!["witte".to_string()]));
     }
 
     #[test]

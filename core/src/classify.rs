@@ -25,6 +25,11 @@ pub fn claude_session_candidates(processes: &[ProcessEntry]) -> Vec<&ProcessEntr
 /// of the CLI-session rule above, and deliberately so (see the "identifies
 /// agent by command" test for why `comm` can't be trusted here).
 ///
+/// An agent counts as orphaned when its IDE version is listed as retired
+/// in the config, or when its parent process is gone: macOS hands a
+/// process whose parent exited over to `launchd` (pid 1), so an agent
+/// with `ppid == 1` has outlived the IDE window that started it.
+///
 /// The same tree also hosts the various MCP tool subprocesses the agent
 /// spawns (`playwright-mcp`, `context7-mcp`, a `chrome-devtools-mcp`
 /// watchdog, ...), all living under `.../acp-agents/.runtimes/...` — those
@@ -46,7 +51,7 @@ pub fn acp_agents(processes: &[ProcessEntry], retired_versions: &[String]) -> Ve
                 pid: process.pid,
                 etime_seconds: process.etime_seconds,
                 ide_version: ide_version.to_string(),
-                orphaned: retired_versions.iter().any(|v| v == ide_version),
+                orphaned: process.ppid == 1 || retired_versions.iter().any(|v| v == ide_version),
             })
         })
         .collect()
@@ -115,6 +120,15 @@ mod tests {
         )];
         let agents = acp_agents(&processes, &[]);
         assert!(!agents[0].orphaned);
+    }
+
+    #[test]
+    fn acp_agent_whose_parent_is_gone_is_orphaned() {
+        let mut agent = process(
+            "/Users/km/Library/Application Support/JetBrains/PhpStorm2026.2/acp-agents/agent",
+        );
+        agent.ppid = 1;
+        assert!(acp_agents(&[agent], &[])[0].orphaned);
     }
 
     #[test]

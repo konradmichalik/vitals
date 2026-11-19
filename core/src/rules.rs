@@ -367,7 +367,7 @@ fn ddev_project_problems(report: &VitalsReport) -> Option<Finding> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::types::{
         AcpAgent, ClaudeSession, CoreCount, CpuUsage, DdevInfo, DockerContainer, DockerInfo,
@@ -375,7 +375,7 @@ mod tests {
         TimeMachineInfo, TmExclusion,
     };
 
-    fn base_report() -> VitalsReport {
+    pub(crate) fn base_report() -> VitalsReport {
         VitalsReport {
             schema_version: 1,
             timestamp: "2026-08-12T09:52:00Z".to_string(),
@@ -399,6 +399,8 @@ mod tests {
                     compressor_bytes: 0,
                     swap_used_bytes: 0,
                     pageouts: 0,
+                    total_bytes: 0,
+                    available_bytes: 0,
                 },
                 cpu: CpuUsage::default(),
             },
@@ -412,6 +414,10 @@ mod tests {
             docker: DockerInfo::default(),
             processes: ProcessesInfo::default(),
             findings: Vec::new(),
+            disk: Default::default(),
+            consumers: Vec::new(),
+            quick_wins: Vec::new(),
+            incidents: Vec::new(),
         }
     }
 
@@ -695,6 +701,8 @@ mod tests {
             kind: "cli".to_string(),
             version: "2.1.228".to_string(),
             working_directory: None,
+            tree_rss_bytes: 0,
+            idle_seconds: None,
         }];
         let config = Config::default();
 
@@ -1071,6 +1079,8 @@ mod tests {
             kind: "cli".to_string(),
             version: "1.0".to_string(),
             working_directory: None,
+            tree_rss_bytes: 0,
+            idle_seconds: None,
         }];
         let runaway = ProcessEntry {
             pid: 4,

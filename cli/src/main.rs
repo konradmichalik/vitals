@@ -393,6 +393,8 @@ mod tests {
                     compressor_bytes: 10_905_550_848,
                     swap_used_bytes: 21_690_548_224,
                     pageouts: 7_301_205,
+                    total_bytes: 25_769_803_776,
+                    available_bytes: 6_442_450_944,
                 },
                 cpu: CpuUsage::default(),
             },
@@ -406,6 +408,10 @@ mod tests {
             docker: DockerInfo::default(),
             processes: ProcessesInfo::default(),
             findings,
+            disk: Default::default(),
+            consumers: Vec::new(),
+            quick_wins: Vec::new(),
+            incidents: Vec::new(),
         }
     }
 

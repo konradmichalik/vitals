@@ -10,13 +10,16 @@ pub mod claude_cli;
 pub mod cores;
 pub mod cpu;
 pub mod ddev;
+pub mod disk;
 pub mod docker;
+pub mod incidents;
 pub mod load;
 pub mod memory;
 pub mod orbstack;
 pub mod processes;
 pub mod swap;
 pub mod time_machine;
+pub mod transcripts;
 pub mod uptime;
 pub mod vm_stat;
 

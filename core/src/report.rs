@@ -5,7 +5,7 @@
 use crate::config::Config;
 use crate::error::VitalsError;
 use crate::probes::processes::ProcessEntry;
-use crate::{classify, probes, types};
+use crate::{activity, classify, consumers, probes, types};
 
 /// Returns the report alongside the raw process table, since `rules`
 /// needs entries (e.g. a `mutagen` process) that never make it into the
@@ -28,6 +28,8 @@ pub fn collect(config: &Config) -> Result<(types::VitalsReport, Vec<ProcessEntry
         compressor_bytes: vm_stat.compressor_bytes(),
         swap_used_bytes: swap.used_bytes,
         pageouts: vm_stat.pageouts,
+        total_bytes,
+        available_bytes: total_bytes.saturating_sub(vm_stat.used_bytes()),
     };
 
     let cpu = probes::cpu::read()?;
@@ -49,7 +51,7 @@ pub fn collect(config: &Config) -> Result<(types::VitalsReport, Vec<ProcessEntry
     };
 
     let ddev_projects = probes::ddev::list()?;
-    let ddev = probes::ddev::summarize(&ddev_projects);
+    let mut ddev = probes::ddev::summarize(&ddev_projects);
 
     let dangling_images = probes::docker::dangling_images()?;
     let docker = types::DockerInfo {
@@ -57,6 +59,9 @@ pub fn collect(config: &Config) -> Result<(types::VitalsReport, Vec<ProcessEntry
         dangling_image_count: dangling_images.count,
         reclaimable_bytes: dangling_images.reclaimable_bytes,
     };
+
+    let now = activity::now_unix();
+    ddev.projects = ddev_project_infos(&ddev_projects, &docker.containers, config, now);
 
     let process_entries = probes::processes::list()?;
     let processes = types::ProcessesInfo {
@@ -66,7 +71,18 @@ pub fn collect(config: &Config) -> Result<(types::VitalsReport, Vec<ProcessEntry
         top_by_cpu: top_processes(&process_entries, 5),
     };
 
-    let report = types::VitalsReport {
+    let home = std::env::var("HOME").ok();
+    let groups = consumers::groups(&consumers::Inputs {
+        processes: &process_entries,
+        sessions: &processes.claude_sessions,
+        acp_agents: &processes.acp_agents,
+        containers: &docker.containers,
+        ddev_projects: &ddev.projects,
+        config,
+        home: home.as_deref(),
+    });
+
+    let mut report = types::VitalsReport {
         schema_version: types::SCHEMA_VERSION,
         timestamp: timestamp_now()?,
         system,
@@ -75,9 +91,65 @@ pub fn collect(config: &Config) -> Result<(types::VitalsReport, Vec<ProcessEntry
         docker,
         processes,
         findings: Vec::new(),
+        disk: types::DiskInfo {
+            total_bytes: probes::disk::total_bytes().ok(),
+        },
+        consumers: Vec::new(),
+        quick_wins: Vec::new(),
+        incidents: probes::incidents::recent(14, 10, std::time::SystemTime::now()),
     };
+    report.quick_wins = consumers::quick_wins(&groups, &report, &process_entries, config);
+    report.consumers = groups;
 
     Ok((report, process_entries))
+}
+
+/// Joins `ddev list` with the containers' live usage, and records which
+/// projects were busy in this sample so idle time can be measured across
+/// runs (`activity`). A project counts as busy when its containers
+/// together use at least `idle.ddev_cpu_percent`.
+fn ddev_project_infos(
+    projects: &[probes::ddev::DdevProject],
+    containers: &[types::DockerContainer],
+    config: &Config,
+    now: u64,
+) -> Vec<types::DdevProjectInfo> {
+    let mut infos: Vec<types::DdevProjectInfo> = projects
+        .iter()
+        .map(|project| {
+            let mine = containers
+                .iter()
+                .filter(|c| c.ddev_project.as_deref() == Some(project.name.as_str()));
+            let (mem_bytes, cpu_percent) =
+                mine.fold((0, 0.0), |(m, c), x| (m + x.mem_bytes, c + x.cpu_percent));
+            types::DdevProjectInfo {
+                name: project.name.clone(),
+                status: project.status.clone(),
+                approot: project.location.clone(),
+                mem_bytes,
+                cpu_percent,
+                idle_seconds: None,
+            }
+        })
+        .collect();
+
+    let observations: Vec<activity::Observation> = infos
+        .iter()
+        .filter(|info| info.status == "running")
+        .map(|info| activity::Observation {
+            key: format!("ddev:{}", info.name),
+            active: info.cpu_percent >= config.idle.ddev_cpu_percent,
+        })
+        .collect();
+
+    if let Some(path) = activity::default_path() {
+        let state = activity::update(&activity::load(&path), &observations, now);
+        activity::save(&path, &state);
+        for info in infos.iter_mut().filter(|info| info.status == "running") {
+            info.idle_seconds = activity::idle_seconds(&state, &format!("ddev:{}", info.name), now);
+        }
+    }
+    infos
 }
 
 /// `classify::claude_session_candidates` can only narrow by display name
@@ -90,7 +162,12 @@ fn claude_sessions(processes: &[ProcessEntry]) -> Vec<types::ClaudeSession> {
         .into_iter()
         .filter_map(|process| {
             let info = probes::claude_cli::resolve(process.pid)?;
+            let idle_seconds = info.working_directory.as_deref().and_then(|dir| {
+                probes::transcripts::seconds_since_last_write(dir, std::time::SystemTime::now())
+            });
             Some(types::ClaudeSession {
+                tree_rss_bytes: consumers::tree_rss(processes, process.pid),
+                idle_seconds,
                 pid: process.pid,
                 etime_seconds: process.etime_seconds,
                 cpu_percent: process.cpu_percent,

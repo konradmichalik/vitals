@@ -4,7 +4,7 @@
 
 use serde::{Deserialize, Serialize};
 
-pub const SCHEMA_VERSION: u32 = 3;
+pub const SCHEMA_VERSION: u32 = 4;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -17,6 +17,106 @@ pub struct VitalsReport {
     pub docker: DockerInfo,
     pub processes: ProcessesInfo,
     pub findings: Vec<Finding>,
+    #[serde(default)]
+    pub disk: DiskInfo,
+    /// Who holds the memory, grouped the way the menubar app shows it.
+    #[serde(default)]
+    pub consumers: Vec<ConsumerGroup>,
+    /// Ready-to-run ways to get memory or CPU back, largest gain first.
+    #[serde(default)]
+    pub quick_wins: Vec<QuickWin>,
+    /// Recent JetsamEvent reports: when macOS itself ended processes
+    /// because memory ran out.
+    #[serde(default)]
+    pub incidents: Vec<Incident>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiskInfo {
+    /// Bytes read and written by all disks since boot (`iostat -I`). A
+    /// rate needs two readings; pollers derive it from the difference.
+    pub total_bytes: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConsumerGroup {
+    /// Stable identifier: `ddev`, `agents`, `phpstorm`, `browser`,
+    /// `containers`, `apps` or `system`.
+    pub id: String,
+    pub name: String,
+    pub mem_bytes: u64,
+    pub cpu_percent: f64,
+    /// The part of `mem_bytes` held by idle items that may be freed.
+    pub idle_bytes: u64,
+    pub items: Vec<ConsumerItem>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConsumerItem {
+    pub id: String,
+    pub name: String,
+    pub detail: String,
+    pub mem_bytes: u64,
+    pub cpu_percent: f64,
+    pub idle: bool,
+    /// How long this item has shown no activity, when that is known.
+    pub idle_seconds: Option<u64>,
+    pub protected: bool,
+    pub action: Option<ItemAction>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ItemAction {
+    /// An `ACTION_NAMES` entry.
+    pub action: String,
+    pub target: Option<String>,
+    pub label: String,
+    /// True when running it interrupts work, so a caller must ask first.
+    pub confirm: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QuickWin {
+    pub id: String,
+    pub title: String,
+    pub detail: String,
+    /// Estimated memory returned, from the RSS of the affected processes
+    /// or containers. Zero when the gain is not memory (CPU, disk).
+    pub reclaimable_bytes: u64,
+    pub action: String,
+    /// One target per entry; empty for actions that derive their own.
+    pub targets: Vec<String>,
+    pub label: String,
+    pub confirm: bool,
+    /// The action that reverses this one, if any (`start_project`).
+    pub undo_action: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Incident {
+    pub file: String,
+    pub date: String,
+    pub largest_process: Option<String>,
+    pub page_size_bytes: u64,
+    /// Processes the report marks with a termination `reason`.
+    pub killed: Vec<IncidentProcess>,
+    /// The largest processes at the time, by resident pages.
+    pub top: Vec<IncidentProcess>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IncidentProcess {
+    pub pid: Option<u32>,
+    pub name: String,
+    pub bytes: u64,
+    pub reason: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -75,6 +175,12 @@ pub struct MemoryInfo {
     pub compressor_bytes: u64,
     pub swap_used_bytes: u64,
     pub pageouts: u64,
+    #[serde(default)]
+    pub total_bytes: u64,
+    /// `total_bytes` minus active, wired and compressed memory — what is
+    /// left before macOS has to compress or swap more.
+    #[serde(default)]
+    pub available_bytes: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -99,6 +205,22 @@ pub struct DdevInfo {
     pub problems: Vec<String>,
     pub paused_count: u32,
     pub stopped_count: u32,
+    #[serde(default)]
+    pub projects: Vec<DdevProjectInfo>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DdevProjectInfo {
+    pub name: String,
+    pub status: String,
+    pub approot: String,
+    /// Sum over the project's containers (`docker stats`).
+    pub mem_bytes: u64,
+    pub cpu_percent: f64,
+    /// Seconds since vitals last saw the project's containers busy; only
+    /// counts time vitals was running (see `activity`).
+    pub idle_seconds: Option<u64>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -159,6 +281,14 @@ pub struct ClaudeSession {
     /// on a machine typically shares the same `version`, so that alone
     /// doesn't tell parallel sessions apart the way this does.
     pub working_directory: Option<String>,
+    /// RSS of the session plus every process it started (MCP servers,
+    /// tool runs) — what ending the session gives back.
+    #[serde(default)]
+    pub tree_rss_bytes: u64,
+    /// Seconds since any transcript in the session's working directory
+    /// was written. `None` when no transcript was found.
+    #[serde(default)]
+    pub idle_seconds: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
