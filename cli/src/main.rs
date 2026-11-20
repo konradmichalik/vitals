@@ -157,6 +157,13 @@ fn run_fix(
         }
     };
 
+    // Checked before the dry run as well, so a preview never shows a
+    // command that the real run would refuse.
+    if let Err(message) = action.validate() {
+        eprintln!("vitals: {message}");
+        return ExitCode::FAILURE;
+    }
+
     if dry_run {
         println!("Would run: {}", action.describe());
         return ExitCode::SUCCESS;

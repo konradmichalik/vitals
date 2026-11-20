@@ -246,6 +246,11 @@ fn mutagen_active(processes: &[ProcessEntry], config: &Config) -> Option<Finding
 /// it must classify "runaway" exactly the way this rule did or it could
 /// kill something this rule never actually flagged.
 pub fn is_runaway(process: &ProcessEntry, config: &Config) -> bool {
+    // `kernel_task` running hot is how macOS throttles an overheating
+    // machine. It cannot be killed, and offering to would be wrong advice.
+    if process.comm == "kernel_task" {
+        return false;
+    }
     let min_seconds = (config.thresholds.runaway_min_minutes * 60.0) as u64;
     process.cpu_percent > config.thresholds.runaway_cpu_percent
         && process.etime_seconds > min_seconds
