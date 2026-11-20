@@ -87,6 +87,17 @@ enum MetricHistory {
         }
     }
 
+    /// At most `count` points for a small sparkline, each the peak of its
+    /// stretch of samples: peaks are what a trend line is read for, and a
+    /// tile has no room for 360 separate points.
+    static func downsampled(_ values: [Double?], to count: Int) -> [Double] {
+        guard count > 0, values.count > count else { return values.map { $0 ?? 0 } }
+        let size = Int((Double(values.count) / Double(count)).rounded(.up))
+        return stride(from: 0, to: values.count, by: size).map { start in
+            values[start..<min(start + size, values.count)].compactMap { $0 }.max() ?? 0
+        }
+    }
+
     static func pruning(
         _ history: [MetricSample],
         olderThan maxAge: TimeInterval,

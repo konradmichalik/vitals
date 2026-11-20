@@ -22,6 +22,9 @@ final class AppState: ObservableObject {
     /// so the summary can say it is measuring instead of showing a stale
     /// verdict.
     @Published var measuring = false
+    /// Derived once per reading instead of in every view body.
+    @Published private(set) var cpuSaturatedNow = false
+    @Published private(set) var diskBusyNow = false
 
     @AppStorage(AppNotifier.alertStorageKey) var notifyOnAlerts = true
     var lastAlertSeverities: [String: Severity] = [:]
@@ -30,6 +33,11 @@ final class AppState: ObservableObject {
     var lastGuardRun: Date?
     var toastTask: Task<Void, Never>?
     private var pollTask: Task<Void, Never>?
+    private var lastHistorySave = Date.distantPast
+    /// History is written at most this often; the samples in between are
+    /// only lost if the app is killed, and `flushHistory` covers a normal
+    /// quit.
+    nonisolated static let historySaveInterval: TimeInterval = 60
 
     nonisolated static let greenInterval: TimeInterval = 30
     nonisolated static let alertInterval: TimeInterval = 10
@@ -58,8 +66,15 @@ final class AppState: ObservableObject {
     var idleMinutes: Int { AppSettings.idleMinutes(in: defaults) }
     var protectedItems: [String] { AppSettings.protectedItems(in: defaults) }
 
-    func refresh() async {
-        let overrides = AppSettings.overridesJSON(idleMinutes: idleMinutes, protected: protectedItems)
+    func flushHistory() {
+        historyStore.save(history)
+        lastHistorySave = Date()
+    }
+
+    /// `fresh` skips the core's probe caches: right after an action the
+    /// report has to show what just changed.
+    func refresh(fresh: Bool = false) async {
+        let overrides = AppSettings.overridesJSON(idleMinutes: idleMinutes, protected: protectedItems, fresh: fresh)
         let result = await Task.detached(priority: .utility) {
             VitalsBridge.collect(overridesJSON: overrides)
         }.value
@@ -77,10 +92,14 @@ final class AppState: ObservableObject {
         self.report = report
         self.lastError = nil
         history = MetricHistory.appending(.from(report: report), to: history)
-        historyStore.save(history)
+        if Date().timeIntervalSince(lastHistorySave) >= Self.historySaveInterval {
+            flushHistory()
+        }
         measuring = false
 
-        let summary = HealthSummary.from(report: report, cpuSaturated: cpuSaturated())
+        cpuSaturatedNow = cpuSaturated()
+        diskBusyNow = diskBusy()
+        let summary = HealthSummary.from(report: report, cpuSaturated: cpuSaturatedNow)
         self.summary = summary
         menuBar = MenuBarState.from(report: report, summary: summary)
 

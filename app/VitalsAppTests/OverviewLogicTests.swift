@@ -107,11 +107,27 @@ final class AppSettingsTests: XCTestCase {
     }
 
     func testCliArgumentsCarryTheSameSettings() {
-        XCTAssertEqual(AppSettings.cliArguments(idleMinutes: 60, protected: []), ["--idle-minutes", "60"])
+        XCTAssertEqual(AppSettings.cliArguments(idleMinutes: 60, protected: []), ["--idle-minutes=60"])
         XCTAssertEqual(
             AppSettings.cliArguments(idleMinutes: 60, protected: ["a", "b"]),
-            ["--idle-minutes", "60", "--protect", "a,b"]
+            ["--idle-minutes=60", "--protect=a,b"]
         )
+    }
+
+    func testFreshIsOnlySentWhenAsked() {
+        XCTAssertEqual(
+            AppSettings.overridesJSON(idleMinutes: 90, protected: [], fresh: true),
+            #"{"fresh":true,"idleAfterMinutes":90,"protected":[]}"#
+        )
+    }
+
+    /// The CLI splits `--protect` on commas; an entry containing one
+    /// would protect nothing while looking as if it did.
+    func testProtectedEntriesWithCommasAreRefused() {
+        XCTAssertEqual(AppSettings.sanitizedProtectedEntry("  witte "), "witte")
+        XCTAssertEqual(AppSettings.sanitizedProtectedEntry("~/Sites/my project"), "~/Sites/my project")
+        XCTAssertNil(AppSettings.sanitizedProtectedEntry("a,b"))
+        XCTAssertNil(AppSettings.sanitizedProtectedEntry("   "))
     }
 
     func testGuardScopesKeepOnlyEnabledKinds() {
@@ -134,13 +150,28 @@ final class AppSettingsTests: XCTestCase {
 final class ActionPlumbingTests: XCTestCase {
     func testBuildsMultiTargetScopedArgumentsWithSettings() {
         let args = ActionRunner.buildArguments(
-            action: "free_idle", targets: [], scope: ["ddev", "agents"], extra: ["--idle-minutes", "120"]
+            action: "free_idle", targets: [], scope: ["ddev", "agents"], extra: ["--idle-minutes=120"]
         )
-        XCTAssertEqual(args, ["--fix", "free_idle", "--yes", "--scope", "ddev,agents", "--idle-minutes", "120"])
+        XCTAssertEqual(args, ["--fix", "free_idle", "--yes", "--scope=ddev,agents", "--idle-minutes=120"])
         XCTAssertEqual(
             ActionRunner.buildArguments(action: "stop_project", targets: ["a", "b"], scope: nil, extra: []),
-            ["--fix", "stop_project", "--yes", "--target", "a,b"]
+            ["--fix", "stop_project", "--yes", "--target=a,b"]
         )
+    }
+
+    /// A value that starts with a dash must stay a value. Joined with
+    /// `=` it can never be read as an option; the CLI then refuses it.
+    func testATargetCanNeverBecomeAnOption() {
+        let args = ActionRunner.buildArguments(action: "stop_project", targets: ["--remove-data"], scope: nil, extra: [])
+        XCTAssertEqual(args, ["--fix", "stop_project", "--yes", "--target=--remove-data"])
+    }
+
+    func testDownsamplingKeepsThePeaks() {
+        let values: [Double?] = (0..<100).map { $0 == 57 ? 99 : 1 }
+        let small = MetricHistory.downsampled(values, to: 10)
+        XCTAssertEqual(small.count, 10)
+        XCTAssertEqual(small.max(), 99)
+        XCTAssertEqual(MetricHistory.downsampled([1, nil, 3], to: 10), [1, 0, 3])
     }
 
     func testQuickWinRequestsAskOnlyWhenTheCoreSaysSo() {

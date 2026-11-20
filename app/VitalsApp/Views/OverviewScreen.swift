@@ -158,7 +158,7 @@ struct MetricTile: View {
         let values = metric.values(appState.history)
         let current = values.last.flatMap { $0 }
         let formatted = metric.format(current)
-        let tint = metric.tint(report: report, summary: appState.summary, diskBusy: appState.diskBusy())
+        let tint = metric.tint(report: report, summary: appState.summary, diskBusy: appState.diskBusyNow)
         Button(action: action) {
             VStack(alignment: .leading, spacing: 1) {
                 Label(metric.label, systemImage: metric.symbol)
@@ -171,7 +171,7 @@ struct MetricTile: View {
                 }
                 .monospacedDigit()
                 .foregroundStyle(tint ?? .primary)
-                MiniSparkline(values: values.map { $0 ?? 0 }, color: tint ?? .secondary)
+                MiniSparkline(values: MetricHistory.downsampled(values, to: 40), color: tint ?? .secondary)
                     .padding(.top, 2)
             }
             .padding(8)

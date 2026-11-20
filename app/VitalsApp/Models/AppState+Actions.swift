@@ -64,7 +64,7 @@ extension AppState {
             }.value
             busy.remove(request.id)
             finish(request, result: result)
-            await refresh()
+            await refresh(fresh: true)
         }
     }
 

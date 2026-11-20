@@ -169,15 +169,14 @@ struct ProtectedList: View {
                 TextField("Project name or folder", text: $draft)
                     .textFieldStyle(.plain)
                     .onSubmit(add)
-                RowButton(title: "Add", action: add).disabled(draft.trimmingCharacters(in: .whitespaces).isEmpty)
+                RowButton(title: "Add", action: add).disabled(AppSettings.sanitizedProtectedEntry(draft) == nil)
             }
             .frame(minHeight: 40)
         }
     }
 
     private func add() {
-        let value = draft.trimmingCharacters(in: .whitespaces)
-        guard !value.isEmpty, !items.contains(value) else { return }
+        guard let value = AppSettings.sanitizedProtectedEntry(draft), !items.contains(value) else { return }
         update(items + [value])
         draft = ""
     }
@@ -185,7 +184,7 @@ struct ProtectedList: View {
     private func update(_ new: [String]) {
         items = new
         AppSettings.setProtectedItems(new)
-        Task { await appState.refresh() }
+        Task { await appState.refresh(fresh: true) }
     }
 }
 

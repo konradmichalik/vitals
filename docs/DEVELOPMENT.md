@@ -117,6 +117,48 @@ stale list from an earlier poll never decides what gets stopped. `--scope`,
 `--idle-minutes` and `--protect` let the app pass its own settings; the FFI equivalent
 is `vitals_collect_with(overrides_json)`.
 
+## Cost of a reading
+
+The app links the core and polls every 10–30 seconds, so a reading has to be cheap:
+
+- `report::collect` runs the slow, independent probes (Docker, DDEV, Time Machine,
+  `top`) on scoped threads while the calling thread reads the rest. A reading takes as
+  long as the slowest probe, not the sum.
+- `cache.rs` holds small TTL caches for answers that change rarely: `ddev list` (60 s),
+  dangling images and Time Machine exclusions (5 min), the diagnostic-report listing
+  (60 s), the newest transcript per project folder (30 s). `lsof` runs once per Claude
+  process (keyed by PID and start time), core count and installed memory once per
+  process lifetime. Errors are never cached.
+- After an action the app passes `"fresh": true` in the overrides, which calls
+  `cache::invalidate_all()`; facts no action can change use a sticky cache and survive.
+- `docker stats` is skipped when `docker ps` lists nothing. The process table is read
+  once and reused for OrbStack and the process tree (`consumers::ProcessTree`).
+- `activity.json` is rewritten only when a project became active, the set of projects
+  changed, or the stored timestamps are two minutes old.
+- A missing or stopped Docker/DDEV degrades to "no containers" instead of failing the
+  whole report.
+
+On the Swift side the popover's view tree exists only while it is open
+(`AppDelegate.popoverDidClose`), sparklines are downsampled to 40 points, derived flags
+are computed once per reading in `AppState`, and history is persisted at most once a
+minute plus on quit.
+
+## Safety of actions
+
+`Action::validate` runs first in `execute` and in the CLI before a dry run:
+
+- DDEV project names must look like hostnames. A target such as `--remove-data` can
+  therefore never reach `ddev stop` as a flag.
+- PIDs 0 and 1 and vitals' own PID are refused. `kill_session` additionally looks the
+  process up again and only signals a Claude Code session or an IDE agent, so a PID that
+  was reused since the report cannot hit an unrelated process.
+- App names are checked before they are placed in an AppleScript literal or passed to
+  `open -a`, and matched literally when waiting for the app to quit.
+- System tools (`kill`, `osascript`, `ps`, …) are run by absolute path
+  (`probes::shell::SYSTEM_TOOLS`); only `ddev` and `docker` are found through `PATH`.
+- The app passes values as `--flag=value`, so a value is never parsed as an option.
+- Diagnostic reports larger than 8 MB are not read.
+
 ## Incidents
 
 `probes/incidents.rs` reads `JetsamEvent-*.ips` from `/Library/Logs/DiagnosticReports`

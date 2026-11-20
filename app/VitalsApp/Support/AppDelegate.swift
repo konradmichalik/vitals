@@ -17,7 +17,7 @@ import UserNotifications
 /// while the badge is a real, separate `NSView` layered on top — never
 /// part of the same image, so it's never subject to template masking.
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate, NSPopoverDelegate {
     @AppStorage(AppNotifier.alertStorageKey) private var notifyOnAlerts = true
 
     let appState = AppState()
@@ -26,6 +26,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     private var popover: NSPopover?
     private var cancellable: AnyCancellable?
     private var defaultsObserver: NSObjectProtocol?
+    private var lastShownState: MenuBarState?
+    private var lastShownMode: MenuBarMode?
+    private var lastToolTip: String?
 
     /// `xcodebuild test` hosts the app in a process that UNUserNotificationCenter
     /// can't resolve a bundle identity for (it crashes with "could not
@@ -75,7 +78,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
 
         let popover = NSPopover()
         popover.behavior = .transient
-        popover.contentViewController = NSHostingController(rootView: MenubarView().environmentObject(appState))
+        popover.delegate = self
         self.popover = popover
 
         cancellable = appState.$menuBar.combineLatest(appState.$report).sink { [weak self] state, report in
@@ -98,8 +101,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     private func updateStatusItem(_ state: MenuBarState, findings: [Finding]) {
         guard let button = statusItem?.button else { return }
         let mode = MenuBarMode(rawValue: UserDefaults.standard.string(forKey: AppSettings.Key.menuBarMode) ?? "") ?? .gaugeAndValue
-        button.attributedTitle = MenuBarGauge.title(for: state, mode: mode)
-        button.toolTip = TrafficLight.tooltip(for: findings)
+        // Every `UserDefaults` write lands here too; only touch the
+        // button when what it shows actually changed.
+        if lastShownState != state || lastShownMode != mode {
+            button.attributedTitle = MenuBarGauge.title(for: state, mode: mode)
+            lastShownState = state
+            lastShownMode = mode
+        }
+        let toolTip = TrafficLight.tooltip(for: findings)
+        if lastToolTip != toolTip {
+            button.toolTip = toolTip
+            lastToolTip = toolTip
+        }
+    }
+
+    /// The popover's view tree exists only while it is open. Kept alive,
+    /// SwiftUI would re-evaluate every screen and redraw every chart on
+    /// each poll with nobody looking.
+    func popoverDidClose(_ notification: Foundation.Notification) {
+        popover?.contentViewController = nil
+    }
+
+    func applicationWillTerminate(_ notification: Foundation.Notification) {
+        appState.flushHistory()
     }
 
     @objc private func toggleDropdown() {
@@ -117,6 +141,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             // real focus without needing to manage window key status by
             // hand.
             NSApp.activate(ignoringOtherApps: true)
+            popover.contentViewController = NSHostingController(rootView: MenubarView().environmentObject(appState))
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
         }
     }

@@ -77,9 +77,14 @@ enum ActionRunner {
         scope: [String]?,
         extra: [String]
     ) -> [String] {
-        var args = buildArguments(action: action, target: targets.isEmpty ? nil : targets.joined(separator: ","))
+        // `--flag=value` rather than two arguments: a value can then never
+        // be read as an option of its own, whatever it starts with.
+        var args = ["--fix", action, "--yes"]
+        if !targets.isEmpty {
+            args.append("--target=\(targets.joined(separator: ","))")
+        }
         if let scope, !scope.isEmpty {
-            args += ["--scope", scope.joined(separator: ",")]
+            args.append("--scope=\(scope.joined(separator: ","))")
         }
         return args + extra
     }
@@ -112,12 +117,14 @@ enum ActionRunner {
 
         do {
             try process.run()
-            process.waitUntilExit()
         } catch {
             return .failure(.launchFailed(error.localizedDescription))
         }
 
+        // Read before waiting: a child that fills the pipe buffer blocks
+        // until someone reads, and would never exit if we waited first.
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
         let output = String(data: data, encoding: .utf8) ?? ""
 
         if process.terminationStatus == 0 {

@@ -91,10 +91,10 @@ extension AppState {
 
     func notifySustainedLoad() {
         var alerts: [SustainedAlert] = []
-        if cpuSaturated() {
+        if cpuSaturatedNow {
             alerts.append(SustainedAlert(key: "cpu_saturated", title: "CPU saturated", body: "CPU has been above 90% for a while."))
         }
-        if diskBusy() {
+        if diskBusyNow {
             alerts.append(SustainedAlert(key: "disk_busy", title: "Disk busy", body: "Disk activity has stayed above 150 MB/s."))
         }
         let now = Date()

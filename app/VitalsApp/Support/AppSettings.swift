@@ -56,8 +56,13 @@ enum AppSettings {
     }
 
     /// What `vitals_collect_with` expects (see `config::Overrides`).
-    static func overridesJSON(idleMinutes: Int, protected: [String]) -> String {
-        let payload: [String: Any] = ["idleAfterMinutes": idleMinutes, "protected": protected]
+    /// `fresh` asks the core to skip its probe caches, for the reading
+    /// right after an action.
+    static func overridesJSON(idleMinutes: Int, protected: [String], fresh: Bool = false) -> String {
+        var payload: [String: Any] = ["idleAfterMinutes": idleMinutes, "protected": protected]
+        if fresh {
+            payload["fresh"] = true
+        }
         guard let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]),
               let json = String(data: data, encoding: .utf8)
         else { return "{}" }
@@ -67,11 +72,19 @@ enum AppSettings {
     /// The same overrides as CLI flags, appended to every `--fix` call so
     /// the CLI judges "idle" exactly as the report the user looked at did.
     static func cliArguments(idleMinutes: Int, protected: [String]) -> [String] {
-        var args = ["--idle-minutes", String(idleMinutes)]
+        var args = ["--idle-minutes=\(idleMinutes)"]
         if !protected.isEmpty {
-            args += ["--protect", protected.joined(separator: ",")]
+            args.append("--protect=\(protected.joined(separator: ","))")
         }
         return args
+    }
+
+    /// The CLI splits `--protect` on commas, so an entry containing one
+    /// would silently protect nothing. Such input is refused up front.
+    static func sanitizedProtectedEntry(_ raw: String) -> String? {
+        let value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty, value.count <= 300, !value.contains(","), !value.contains("\n") else { return nil }
+        return value
     }
 
     static func guardScopes(ddev: Bool, agents: Bool, orphans: Bool) -> [String] {
