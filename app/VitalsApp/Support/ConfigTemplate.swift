@@ -57,6 +57,16 @@ enum ConfigTemplate {
         # How many IDE ACP agents may run before the count alone reads as a leak.
         # acp_agent_warn_count = 3
 
+        [idle]
+        # Minutes without activity before a DDEV project or Claude session counts
+        # as idle and may be freed. The menu bar app overrides this and the list
+        # below with its own settings.
+        # after_minutes = 120.0
+        # Combined container CPU below which a DDEV project shows no activity.
+        # ddev_cpu_percent = 2.0
+        # Project names or session folders that are never freed.
+        # protected = []
+
         [watch]
         # Paths that should be excluded from Time Machine backups.
         # timemachine_exclusions = ["~/.orbstack", "~/.ddev"]

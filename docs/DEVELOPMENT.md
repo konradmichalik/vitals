@@ -90,10 +90,47 @@ The CLI (`cli/src/main.rs`) owns confirmation and `--target` parsing; `core` nev
 prompts or reads stdin. `vitals --fix <action> --yes` skips the interactive y/N prompt
 — used by the menubar app after its own native confirmation dialog.
 
+## Consumers, idle items and quick wins
+
+`core/src/consumers.rs` groups the raw process table into the groups the app shows
+(`ddev`, `agents`, `phpstorm`, `containers`, `browser`, `apps`, `system`), marks idle
+items and derives `quick_wins`. Memory is RSS from `ps` (and `docker stats` for
+containers); RSS counts shared pages per process, so group totals are good for ranking
+and for estimating what ending something returns, not for an exact budget. The container
+VM host (OrbStack, Docker Desktop) is never shown as an app: its RSS already contains the
+containers, so only the part beyond them appears, as "VM overhead".
+
+Idle is policy, not a macOS fact, and is configured under `[idle]`:
+
+- Claude sessions: seconds since any transcript in
+  `~/.claude/projects/<cwd with non-alphanumerics replaced by ->/` was written
+  (`probes/transcripts.rs`).
+- DDEV projects: DDEV reports no last-used time, so `activity.rs` keeps
+  `~/Library/Caches/vitals/activity.json` with the last time each running project's
+  containers used at least `idle.ddev_cpu_percent`. Gaps longer than 10 minutes (vitals
+  not running) restart the clock, so this only ever counts observed time.
+- ACP agents: orphaned when their IDE version is retired in the config, or when their
+  parent is `launchd` (pid 1), i.e. the IDE window that started them is gone.
+
+`--fix free_idle` re-derives the idle set from a fresh report with `idle_targets`, so a
+stale list from an earlier poll never decides what gets stopped. `--scope`,
+`--idle-minutes` and `--protect` let the app pass its own settings; the FFI equivalent
+is `vitals_collect_with(overrides_json)`.
+
+## Incidents
+
+`probes/incidents.rs` reads `JetsamEvent-*.ips` from `/Library/Logs/DiagnosticReports`
+(and the per-user directory): a header line with `bug_type` "298", then a body with
+`largestProcess`, the page size (`memoryStatus.pageSize`, older reports top-level
+`pageSize`) and `processes`. Only terminated processes carry `reason`. Parsed reports are
+cached per path and mtime because the app polls every few seconds. An unreadable
+directory degrades to no incidents.
+
 ## Menubar app (app/)
 
-`app/vitals-ffi/src/lib.rs` exposes exactly two `#[no_mangle] extern "C"` functions:
-`vitals_collect()` (runs `report::collect` + `rules::evaluate`, returns the same JSON
+`app/vitals-ffi/src/lib.rs` exposes `vitals_collect_with(overrides_json)` (the app's
+idle settings laid over `~/.vitals.toml`, see `config::Overrides`), `vitals_collect()`
+(runs `report::collect` + `rules::evaluate`, returns the same JSON
 shape as `vitals --json`, including the `{"schemaVersion":...,"error":...}` failure
 form) and `vitals_free_string()` (the caller must free every string `vitals_collect`
 returns). `build.rs` runs `cbindgen` on every build, writing the header straight to
@@ -113,7 +150,22 @@ Swift-side structure:
 - `Support/ActionRunner.swift` — `buildArguments(action:target:)` is pure (always
   appends `--yes`); `run()` shells out to the located `vitals` binary via `Process`.
 - `Support/TrafficLight.swift` — `from(findings:)` derives the icon color from the
-  highest-severity finding (green when none fire).
+  highest-severity finding (green when none fire); now only used for the tooltip.
+- `Support/Health.swift` — `HealthSummary` (the one-sentence verdict, memory pressure
+  first, CPU only when memory is fine, measured values only) and `MenuBarState` (gauge
+  fill, tone and the value next to it). `Support/MenuBarGauge.swift` draws the gauge as a
+  title attachment next to the unchanged template icon.
+- `Support/AppSettings.swift` — every app setting lives in `UserDefaults`; the idle
+  settings travel to the core as overrides and to the CLI as flags, so `~/.vitals.toml`
+  is never written back from Swift.
+- `Support/GuardPolicy.swift` — when Guard frees idle items on its own (pressure at or
+  above the chosen level, something idle, 5-minute cooldown), plus `SustainedCheck` for
+  the "CPU above 90% / disk above 150 MB/s for N minutes" warnings.
+- `Support/ActionRequest.swift` — one request per button: busy key, confirmation text for
+  actions that interrupt work, toast text and undo (`start_project`).
+- Views: `MenubarView` is the container (header, screens, toast, confirmation sheet);
+  `OverviewScreen`, `GroupScreen`, `HistoryScreen`, `ActivityScreen` (with
+  `IncidentScreen`) and `SettingsScreen` share the building blocks in `Components.swift`.
 
 Every pure function above (`decode`, `pollInterval`, `buildArguments`,
 `locateVitalsBinary`, `TrafficLight.from`, `Severity`'s `Comparable` conformance) has a

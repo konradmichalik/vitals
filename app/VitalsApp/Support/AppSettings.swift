@@ -75,7 +75,7 @@ enum AppSettings {
     }
 
     static func guardScopes(ddev: Bool, agents: Bool, orphans: Bool) -> [String] {
-        [(ddev, "ddev"), (agents, "agents"), (orphans, "orphans")].filter(\.0).map(\.1)
+        [(ddev, "ddev"), (agents, "agents"), (orphans, "orphans")].filter { $0.0 }.map { $0.1 }
     }
 
     /// Quiet hours run from 19:00 to 08:00 local time.
