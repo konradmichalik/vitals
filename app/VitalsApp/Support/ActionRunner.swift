@@ -57,7 +57,7 @@ enum ActionRunner {
     /// actions get a "Run" button; everything else is shown as plain text.
     static let runnableActions: Set<String> = [
         "poweroff", "stop_backup", "add_exclusions", "kill_orphaned_agents",
-        "prune_docker_images", "kill_runaway_processes",
+        "prune_docker_images", "kill_runaway_processes", "free_idle",
     ]
 
     static func buildArguments(action: String, target: String?) -> [String] {
@@ -66,6 +66,22 @@ enum ActionRunner {
             args += ["--target", target]
         }
         return args
+    }
+
+    /// Several targets travel as one comma-separated `--target`, which the
+    /// CLI runs as a batch. `extra` carries the idle settings so the CLI
+    /// judges "idle" exactly as the report did.
+    static func buildArguments(
+        action: String,
+        targets: [String],
+        scope: [String]?,
+        extra: [String]
+    ) -> [String] {
+        var args = buildArguments(action: action, target: targets.isEmpty ? nil : targets.joined(separator: ","))
+        if let scope, !scope.isEmpty {
+            args += ["--scope", scope.joined(separator: ",")]
+        }
+        return args + extra
     }
 
     static func locateVitalsBinary(
@@ -77,13 +93,18 @@ enum ActionRunner {
 
     @discardableResult
     static func run(action: String, target: String?) -> Result<String, ActionRunnerError> {
+        run(arguments: buildArguments(action: action, target: target))
+    }
+
+    @discardableResult
+    static func run(arguments: [String]) -> Result<String, ActionRunnerError> {
         guard let vitalsPath = locateVitalsBinary() else {
             return .failure(.vitalsNotFound)
         }
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: vitalsPath)
-        process.arguments = buildArguments(action: action, target: target)
+        process.arguments = arguments
 
         let pipe = Pipe()
         process.standardOutput = pipe

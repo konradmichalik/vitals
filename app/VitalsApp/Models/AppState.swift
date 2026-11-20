@@ -1,19 +1,34 @@
 import SwiftUI
 
 /// Polls `vitals-ffi` on an adaptive interval (§4 sampling notes: 30s
-/// when green, 10s once a rule has fired) and republishes the result for
-/// SwiftUI. `pollInterval(for:)` is a pure function so the adaptive
-/// behavior is testable without a real timer.
+/// when green, faster once a rule has fired) and republishes the result
+/// for SwiftUI. `pollInterval(for:)` is a pure function so the adaptive
+/// behavior is testable without a real timer. Actions live in
+/// `AppState+Actions.swift`, notifications and Guard in
+/// `AppState+Alerts.swift`.
 @MainActor
 final class AppState: ObservableObject {
     @Published private(set) var report: VitalsReport?
     @Published private(set) var lastError: VitalsCollectError?
     @Published private(set) var lastUpdated: Date?
     @Published private(set) var history: [MetricSample] = []
+    @Published private(set) var summary: HealthSummary?
+    @Published private(set) var menuBar = MenuBarState(fill: 0, tone: .normal, label: nil)
+    @Published var activity: [ActivityEntry] = []
+    @Published var busy: Set<String> = []
+    @Published var toast: Toast?
+    @Published var pendingConfirmation: ActionRequest?
+    /// Set while the first reading after a "free" action is outstanding,
+    /// so the summary can say it is measuring instead of showing a stale
+    /// verdict.
+    @Published var measuring = false
 
-    @AppStorage(AppNotifier.alertStorageKey) private var notifyOnAlerts = true
-    private var lastAlertSeverities: [String: Severity] = [:]
-    private var lastNotifiedAt: [String: Date] = [:]
+    @AppStorage(AppNotifier.alertStorageKey) var notifyOnAlerts = true
+    var lastAlertSeverities: [String: Severity] = [:]
+    var lastNotifiedAt: [String: Date] = [:]
+    var lastPressure: PressureLevel?
+    var lastGuardRun: Date?
+    var toastTask: Task<Void, Never>?
     private var pollTask: Task<Void, Never>?
 
     nonisolated static let greenInterval: TimeInterval = 30
@@ -24,9 +39,13 @@ final class AppState: ObservableObject {
     nonisolated static let notificationCooldown: TimeInterval = 15 * 60
 
     private let historyStore = MetricHistoryStore()
+    let activityStore = ActivityLogStore()
+    let defaults = UserDefaults.standard
 
     init() {
+        AppSettings.register(in: defaults)
         history = historyStore.load()
+        activity = activityStore.load()
         pollTask = Task { [weak self] in
             await self?.pollLoop()
         }
@@ -36,49 +55,52 @@ final class AppState: ObservableObject {
         pollTask?.cancel()
     }
 
+    var idleMinutes: Int { AppSettings.idleMinutes(in: defaults) }
+    var protectedItems: [String] { AppSettings.protectedItems(in: defaults) }
+
     func refresh() async {
+        let overrides = AppSettings.overridesJSON(idleMinutes: idleMinutes, protected: protectedItems)
         let result = await Task.detached(priority: .utility) {
-            VitalsBridge.collect()
+            VitalsBridge.collect(overridesJSON: overrides)
         }.value
 
         switch result {
         case .success(let report):
-            self.report = report
-            self.lastError = nil
-            history = MetricHistory.appending(.from(report: report), to: history)
-            historyStore.save(history)
-            notifyAboutNewAlertingFindings(in: report.findings)
+            apply(report)
         case .failure(let error):
             self.lastError = error
         }
         lastUpdated = Date()
     }
 
-    /// `lastAlertSeverities` is updated unconditionally, even with
-    /// notifications turned off — otherwise turning them on later would
-    /// treat every already-alerting finding as new and fire a
-    /// notification storm for state that isn't actually new.
-    private func notifyAboutNewAlertingFindings(in findings: [Finding]) {
-        let current = FindingAlertTransition.alertingSeverities(in: findings)
-        let newlyAlerting = FindingAlertTransition.newlyAlerting(
-            previous: lastAlertSeverities,
-            current: current
-        )
-        lastAlertSeverities = current
+    private func apply(_ report: VitalsReport) {
+        self.report = report
+        self.lastError = nil
+        history = MetricHistory.appending(.from(report: report), to: history)
+        historyStore.save(history)
+        measuring = false
 
-        guard notifyOnAlerts else { return }
-        let now = Date()
-        for rule in newlyAlerting {
-            guard let finding = findings.first(where: { $0.rule == rule }) else { continue }
-            guard FindingAlertTransition.shouldNotify(
-                rule: rule, now: now, lastNotifiedAt: lastNotifiedAt, cooldown: Self.notificationCooldown
-            ) else { continue }
-            lastNotifiedAt[rule] = now
+        let summary = HealthSummary.from(report: report, cpuSaturated: cpuSaturated())
+        self.summary = summary
+        menuBar = MenuBarState.from(report: report, summary: summary)
 
-            let isCritical = finding.severity == .critical
-            let title = isCritical ? "Vitals — critical" : "Vitals — warning"
-            AppNotifier.notify(id: rule, title: title, body: finding.message, kind: isCritical ? .critical : .warning)
-        }
+        logPressureChange(report.system.memory.pressureLevel)
+        notifyAboutNewAlertingFindings(in: report)
+        notifySustainedLoad()
+        runGuardIfNeeded(report)
+    }
+
+    func log(_ title: String, note: String = "", kind: ActivityEntry.Kind, tone: ActivityEntry.Tone) {
+        let entry = ActivityEntry(date: Date(), kind: kind, tone: tone, title: title, note: note)
+        activity = ActivityLogStore.prepending(entry, to: activity)
+        activityStore.save(activity)
+    }
+
+    private func logPressureChange(_ pressure: PressureLevel) {
+        defer { lastPressure = pressure }
+        guard let previous = lastPressure, previous != pressure else { return }
+        let tone: ActivityEntry.Tone = pressure == .critical ? .critical : pressure == .warn ? .warning : .good
+        log("Memory pressure: \(pressure.label.lowercased())", note: "was \(previous.label.lowercased())", kind: .event, tone: tone)
     }
 
     /// Keyed on severity, not on findings merely existing: info findings
@@ -97,7 +119,10 @@ final class AppState: ObservableObject {
     private func pollLoop() async {
         while !Task.isCancelled {
             await refresh()
-            let seconds = Self.pollInterval(for: report)
+            var seconds = Self.pollInterval(for: report)
+            if seconds == Self.alertInterval {
+                seconds = TimeInterval(max(defaults.integer(forKey: AppSettings.Key.refreshSeconds), 5))
+            }
             try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
         }
     }
