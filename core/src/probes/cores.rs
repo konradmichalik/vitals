@@ -5,7 +5,13 @@
 use crate::error::VitalsError;
 use crate::types::CoreCount;
 
+/// The core layout cannot change while the machine is up.
 pub fn read() -> Result<CoreCount, VitalsError> {
+    static CACHE: crate::cache::Ttl<CoreCount> = crate::cache::Ttl::sticky();
+    CACHE.get_or_try(std::time::Duration::from_secs(86_400), read_uncached)
+}
+
+fn read_uncached() -> Result<CoreCount, VitalsError> {
     let performance = parse_count(&super::shell::run(
         "sysctl",
         &["-n", "hw.perflevel0.logicalcpu"],

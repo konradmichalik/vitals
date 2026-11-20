@@ -64,6 +64,7 @@ fn main() -> ExitCode {
     let overrides = Overrides {
         idle_after_minutes: cli.idle_minutes,
         protected: cli.protect.as_deref().map(split_list),
+        fresh: None,
     };
     let config = match vitals_core::config::load() {
         Ok(config) => config.with_overrides(&overrides),

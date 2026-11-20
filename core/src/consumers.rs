@@ -60,6 +60,7 @@ const APPS_SHOWN: usize = 5;
 
 pub struct Inputs<'a> {
     pub processes: &'a [ProcessEntry],
+    pub tree: &'a ProcessTree,
     pub sessions: &'a [ClaudeSession],
     pub acp_agents: &'a [AcpAgent],
     pub containers: &'a [DockerContainer],
@@ -68,37 +69,51 @@ pub struct Inputs<'a> {
     pub home: Option<&'a str>,
 }
 
-/// PIDs of `root` and everything it started, using the `ppid` column.
-pub fn tree_pids(processes: &[ProcessEntry], root: u32) -> Vec<u32> {
-    let mut children: HashMap<u32, Vec<u32>> = HashMap::new();
-    for p in processes {
-        if p.pid != p.ppid {
-            children.entry(p.ppid).or_default().push(p.pid);
-        }
-    }
-    let mut out = vec![root];
-    let mut seen = HashSet::from([root]);
-    let mut i = 0;
-    while i < out.len() {
-        if let Some(kids) = children.get(&out[i]) {
-            for &kid in kids {
-                if seen.insert(kid) {
-                    out.push(kid);
-                }
-            }
-        }
-        i += 1;
-    }
-    out
+/// Parent/child links of one process snapshot, built once and then asked
+/// for as many subtrees as there are sessions and agents. Building the
+/// links per question would walk the whole table each time.
+pub struct ProcessTree {
+    children: HashMap<u32, Vec<u32>>,
+    rss: HashMap<u32, u64>,
 }
 
-pub fn tree_rss(processes: &[ProcessEntry], root: u32) -> u64 {
-    let by_pid: HashMap<u32, &ProcessEntry> = processes.iter().map(|p| (p.pid, p)).collect();
-    tree_pids(processes, root)
-        .iter()
-        .filter_map(|pid| by_pid.get(pid))
-        .map(|p| p.rss_bytes)
-        .sum()
+impl ProcessTree {
+    pub fn new(processes: &[ProcessEntry]) -> Self {
+        let mut children: HashMap<u32, Vec<u32>> = HashMap::new();
+        let mut rss = HashMap::with_capacity(processes.len());
+        for p in processes {
+            rss.insert(p.pid, p.rss_bytes);
+            if p.pid != p.ppid {
+                children.entry(p.ppid).or_default().push(p.pid);
+            }
+        }
+        Self { children, rss }
+    }
+
+    /// PIDs of `root` and everything it started, using the `ppid` column.
+    pub fn pids(&self, root: u32) -> Vec<u32> {
+        let mut out = vec![root];
+        let mut seen = HashSet::from([root]);
+        let mut i = 0;
+        while i < out.len() {
+            if let Some(kids) = self.children.get(&out[i]) {
+                for &kid in kids {
+                    if seen.insert(kid) {
+                        out.push(kid);
+                    }
+                }
+            }
+            i += 1;
+        }
+        out
+    }
+
+    pub fn rss(&self, root: u32) -> u64 {
+        self.pids(root)
+            .iter()
+            .filter_map(|pid| self.rss.get(pid))
+            .sum()
+    }
 }
 
 pub fn human_duration(seconds: u64) -> String {
@@ -254,7 +269,7 @@ fn agents_group(inputs: &Inputs, claimed: &mut HashSet<u32>) -> Option<ConsumerG
         .sessions
         .iter()
         .map(|s| {
-            claimed.extend(tree_pids(inputs.processes, s.pid));
+            claimed.extend(inputs.tree.pids(s.pid));
             let protected = s
                 .working_directory
                 .as_deref()
@@ -294,7 +309,7 @@ fn phpstorm_group(inputs: &Inputs, claimed: &mut HashSet<u32>) -> Option<Consume
     if !ide.is_empty() {
         let mut pids: HashSet<u32> = HashSet::new();
         for p in &ide {
-            for pid in tree_pids(inputs.processes, p.pid) {
+            for pid in inputs.tree.pids(p.pid) {
                 if !claimed.contains(&pid) {
                     pids.insert(pid);
                 }
@@ -302,7 +317,7 @@ fn phpstorm_group(inputs: &Inputs, claimed: &mut HashSet<u32>) -> Option<Consume
         }
         // Agents are listed separately below.
         for agent in inputs.acp_agents {
-            for pid in tree_pids(inputs.processes, agent.pid) {
+            for pid in inputs.tree.pids(agent.pid) {
                 pids.remove(&pid);
             }
         }
@@ -327,9 +342,9 @@ fn phpstorm_group(inputs: &Inputs, claimed: &mut HashSet<u32>) -> Option<Consume
     }
 
     for agent in inputs.acp_agents {
-        let pids = tree_pids(inputs.processes, agent.pid);
+        let pids = inputs.tree.pids(agent.pid);
         claimed.extend(pids.iter().copied());
-        let mem = tree_rss(inputs.processes, agent.pid);
+        let mem = inputs.tree.rss(agent.pid);
         let detail = if agent.orphaned {
             format!("left behind, {}", agent.ide_version)
         } else {
@@ -822,6 +837,7 @@ mod tests {
         let (processes, sessions, agents, containers, projects) = fixture();
         groups(&Inputs {
             processes: &processes,
+            tree: &ProcessTree::new(&processes),
             sessions: &sessions,
             acp_agents: &agents,
             containers: &containers,
@@ -841,8 +857,9 @@ mod tests {
     #[test]
     fn tree_rss_includes_descendants_once() {
         let (processes, ..) = fixture();
-        assert_eq!(tree_rss(&processes, 301), 500 * MB);
-        assert_eq!(tree_pids(&processes, 300).len(), 5);
+        let tree = ProcessTree::new(&processes);
+        assert_eq!(tree.rss(301), 500 * MB);
+        assert_eq!(tree.pids(300).len(), 5);
     }
 
     #[test]

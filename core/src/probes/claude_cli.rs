@@ -26,6 +26,44 @@ pub fn resolve(pid: u32) -> Option<ClaudeCliInfo> {
     parse(&raw)
 }
 
+/// A process is identified by its PID together with when it started, so
+/// a reused PID is never mistaken for the process that had it before.
+type ProcessKey = (u32, u64);
+
+static RESOLVED: crate::cache::KeyedTtl<ProcessKey, Option<ClaudeCliInfo>> =
+    crate::cache::KeyedTtl::sticky();
+
+/// `ps` reports elapsed time in whole seconds, so the computed start can
+/// differ by a second between two snapshots of the same process.
+fn start_bucket(now: u64, etime_seconds: u64) -> u64 {
+    now.saturating_sub(etime_seconds) / 4
+}
+
+/// Like [`resolve`], but asks `lsof` only once per process. Version and
+/// working directory of a running session do not change, while `lsof`
+/// walks every open file of the process — far too much to repeat for
+/// every session on every poll. A "not the real CLI" answer is
+/// remembered as well.
+pub fn resolve_cached(pid: u32, etime_seconds: u64, now: u64) -> Option<ClaudeCliInfo> {
+    let bucket = start_bucket(now, etime_seconds);
+    // Either neighbouring bucket may hold the entry (see `start_bucket`).
+    for candidate in [bucket, bucket.saturating_sub(1), bucket + 1] {
+        if let Some(hit) = RESOLVED.peek(&(pid, candidate)) {
+            return hit;
+        }
+    }
+    RESOLVED.get_or(
+        &(pid, bucket),
+        std::time::Duration::from_secs(86_400),
+        || resolve(pid),
+    )
+}
+
+/// Forgets processes that are no longer running.
+pub fn forget_except(running_pids: &std::collections::HashSet<u32>) {
+    RESOLVED.retain(|(pid, _)| running_pids.contains(pid));
+}
+
 fn parse(raw: &str) -> Option<ClaudeCliInfo> {
     let version = raw
         .lines()
@@ -64,6 +102,14 @@ mod tests {
     const REAL_SESSION: &str = "COMMAND   PID     USER   FD   TYPE DEVICE  SIZE/OFF     NODE NAME\n\
         2.1.228 40078 km       cwd    DIR    1,15      1696   19872373 /Users/km/Sites/Projects/verdi\n\
         2.1.228 40078 km       txt    REG    1,15 289298144 316524854 /Users/km/.local/share/claude/ClaudeCode.app/Contents/MacOS/claude\n";
+
+    #[test]
+    fn start_bucket_tolerates_one_second_of_jitter_via_its_neighbours() {
+        let exact = start_bucket(1_000_000, 500);
+        let jittered = start_bucket(1_000_001, 502);
+        assert!(exact.abs_diff(jittered) <= 1);
+        assert_ne!(start_bucket(1_000_000, 500), start_bucket(1_000_000, 100));
+    }
 
     #[test]
     fn extracts_version_from_the_real_binarys_command_field() {

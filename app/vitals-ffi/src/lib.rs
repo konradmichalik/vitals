@@ -67,6 +67,9 @@ pub unsafe extern "C" fn vitals_free_string(ptr: *mut c_char) {
 }
 
 fn collect_json(overrides: &Overrides) -> String {
+    if overrides.fresh == Some(true) {
+        vitals_core::cache::invalidate_all();
+    }
     let config = match vitals_core::config::load() {
         Ok(config) => config.with_overrides(overrides),
         Err(err) => return error_json(&err.to_string()),
@@ -108,6 +111,7 @@ mod tests {
         assert_eq!(overrides.idle_after_minutes, Some(45.0));
         assert_eq!(overrides.protected, Some(vec!["witte".to_string()]));
         assert_eq!(parse_overrides("not json"), Overrides::default());
+        assert_eq!(parse_overrides(r#"{"fresh":true}"#).fresh, Some(true));
     }
 
     #[test]

@@ -31,9 +31,18 @@ pub fn projects_root() -> Option<PathBuf> {
 
 /// Seconds since any transcript for `working_directory` was last written,
 /// or `None` when there is no transcript to go by.
+/// A project folder can hold hundreds of transcripts and each needs a
+/// `stat`. Idle is measured in hours, so the newest write time is looked
+/// up at most twice a minute per folder.
+const CACHE_TTL: std::time::Duration = std::time::Duration::from_secs(30);
+
 pub fn seconds_since_last_write(working_directory: &str, now: SystemTime) -> Option<u64> {
+    static CACHE: crate::cache::KeyedTtl<PathBuf, Option<SystemTime>> =
+        crate::cache::KeyedTtl::new();
     let dir = projects_root()?.join(encode_project_dir(working_directory));
-    newest_jsonl_mtime(&dir).map(|mtime| now.duration_since(mtime).map_or(0, |d| d.as_secs()))
+    CACHE
+        .get_or(&dir, CACHE_TTL, || newest_jsonl_mtime(&dir))
+        .map(|mtime| now.duration_since(mtime).map_or(0, |d| d.as_secs()))
 }
 
 fn newest_jsonl_mtime(dir: &Path) -> Option<SystemTime> {

@@ -45,20 +45,26 @@ pub fn list() -> Result<Vec<DockerContainer>, VitalsError> {
         PS_TIMEOUT,
     ) {
         Ok(raw) => raw,
-        Err(VitalsError::CommandFailed { source, .. })
-            if source.kind() == std::io::ErrorKind::NotFound =>
-        {
-            return Ok(Vec::new());
-        }
+        // Docker not installed or its daemon not running: no containers.
+        Err(err) if super::is_unavailable(&err) => return Ok(Vec::new()),
         Err(err) => return Err(err),
     };
 
     let ps_entries = parse_ps(&ps_raw)?;
-    let stats_raw = super::shell::run_with_timeout(
+    if ps_entries.is_empty() {
+        // `docker stats` samples for a second or more; with nothing
+        // running there is nothing to sample.
+        return Ok(Vec::new());
+    }
+    let stats_raw = match super::shell::run_with_timeout(
         "docker",
         &["stats", "--no-stream", "--format", "{{json .}}"],
         STATS_TIMEOUT,
-    )?;
+    ) {
+        Ok(raw) => raw,
+        Err(err) if super::is_unavailable(&err) => return Ok(Vec::new()),
+        Err(err) => return Err(err),
+    };
     let stats_entries = parse_stats(&stats_raw)?;
 
     Ok(merge(ps_entries, &stats_entries))
@@ -171,7 +177,16 @@ struct DanglingImageEntry {
 /// the reported reclaimable total actually matches what that specific,
 /// conservative command would free — not the larger number `-a` would
 /// reclaim by also removing tagged-but-unused images.
+/// Dangling images only change when something is built or pruned; the
+/// app invalidates the cache after its own prune.
+const IMAGES_CACHE_TTL: Duration = Duration::from_secs(300);
+
 pub fn dangling_images() -> Result<DanglingImages, VitalsError> {
+    static CACHE: crate::cache::Ttl<DanglingImages> = crate::cache::Ttl::new();
+    CACHE.get_or_try(IMAGES_CACHE_TTL, dangling_images_uncached)
+}
+
+fn dangling_images_uncached() -> Result<DanglingImages, VitalsError> {
     match super::shell::run_with_timeout(
         "docker",
         &[
@@ -184,11 +199,7 @@ pub fn dangling_images() -> Result<DanglingImages, VitalsError> {
         IMAGES_TIMEOUT,
     ) {
         Ok(raw) => parse_dangling_images(&raw),
-        Err(VitalsError::CommandFailed { source, .. })
-            if source.kind() == std::io::ErrorKind::NotFound =>
-        {
-            Ok(DanglingImages::default())
-        }
+        Err(err) if super::is_unavailable(&err) => Ok(DanglingImages::default()),
         Err(err) => Err(err),
     }
 }

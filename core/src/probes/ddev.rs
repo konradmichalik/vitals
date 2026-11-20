@@ -20,14 +20,24 @@ pub struct DdevProject {
     pub location: String,
 }
 
+/// How long one `ddev list` answer is reused. It queries Docker per
+/// project and is the most expensive probe; project status changes on
+/// the scale of minutes, and the app invalidates the cache after its own
+/// actions.
+const CACHE_TTL: Duration = Duration::from_secs(60);
+
 pub fn list() -> Result<Vec<DdevProject>, VitalsError> {
+    static CACHE: crate::cache::Ttl<Vec<DdevProject>> = crate::cache::Ttl::new();
+    CACHE.get_or_try(CACHE_TTL, list_uncached)
+}
+
+/// DDEV missing, Docker not running or a stalled backend all mean "no
+/// projects to report", not "vitals cannot report anything": memory and
+/// CPU readings matter most exactly when the container runtime is down.
+fn list_uncached() -> Result<Vec<DdevProject>, VitalsError> {
     match super::shell::run_with_timeout("ddev", &["list", "--json-output"], TIMEOUT) {
         Ok(raw) => parse(&raw),
-        Err(VitalsError::CommandFailed { source, .. })
-            if source.kind() == std::io::ErrorKind::NotFound =>
-        {
-            Ok(Vec::new())
-        }
+        Err(err) if super::is_unavailable(&err) => Ok(Vec::new()),
         Err(err) => Err(err),
     }
 }

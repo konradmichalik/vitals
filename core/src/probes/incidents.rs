@@ -25,8 +25,23 @@ use crate::types::{Incident, IncidentProcess};
 
 const DIRECTORIES: &[&str] = &["/Library/Logs/DiagnosticReports"];
 const TOP_PROCESSES: usize = 5;
+/// A report lists every process on the machine and stays well below a
+/// megabyte. Anything far larger in these (partly user-writable) folders
+/// is not a jetsam report and is not read into memory.
+const MAX_REPORT_BYTES: u64 = 8 * 1024 * 1024;
+/// New reports appear only after a memory incident; the folder does not
+/// need listing on every poll.
+const LISTING_TTL: std::time::Duration = std::time::Duration::from_secs(60);
 
 pub fn recent(max_age_days: u64, limit: usize, now: SystemTime) -> Vec<Incident> {
+    static CACHE: crate::cache::KeyedTtl<(u64, usize), Vec<Incident>> =
+        crate::cache::KeyedTtl::new();
+    CACHE.get_or(&(max_age_days, limit), LISTING_TTL, || {
+        scan(max_age_days, limit, now)
+    })
+}
+
+fn scan(max_age_days: u64, limit: usize, now: SystemTime) -> Vec<Incident> {
     let mut dirs: Vec<PathBuf> = DIRECTORIES.iter().map(PathBuf::from).collect();
     if let Ok(home) = std::env::var("HOME") {
         dirs.push(PathBuf::from(home).join("Library/Logs/DiagnosticReports"));
@@ -40,7 +55,11 @@ pub fn recent(max_age_days: u64, limit: usize, now: SystemTime) -> Vec<Incident>
         .filter_map(Result::ok)
         .map(|entry| entry.path())
         .filter(|path| is_jetsam_report(path))
-        .filter_map(|path| Some((std::fs::metadata(&path).ok()?.modified().ok()?, path)))
+        .filter_map(|path| {
+            let metadata = std::fs::metadata(&path).ok()?;
+            (metadata.is_file() && metadata.len() <= MAX_REPORT_BYTES)
+                .then_some((metadata.modified().ok()?, path))
+        })
         .filter(|(mtime, _)| {
             now.duration_since(*mtime)
                 .map_or(true, |age| age <= max_age)

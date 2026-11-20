@@ -54,6 +54,9 @@ impl Default for IdleConfig {
 pub struct Overrides {
     pub idle_after_minutes: Option<f64>,
     pub protected: Option<Vec<String>>,
+    /// Set after an action or a manual refresh: skip every probe cache
+    /// (see `cache`) so the report reflects what just changed.
+    pub fresh: Option<bool>,
 }
 
 impl Config {
@@ -323,6 +326,7 @@ protected = ["witte", "~/Sites/vitals"]
         let overrides = Overrides {
             idle_after_minutes: Some(0.0),
             protected: Some(vec!["verdi".to_string()]),
+            fresh: None,
         };
         let config = Config::default().with_overrides(&overrides);
         assert_eq!(config.idle.after_minutes, 120.0);
@@ -331,6 +335,7 @@ protected = ["witte", "~/Sites/vitals"]
         let config = Config::default().with_overrides(&Overrides {
             idle_after_minutes: Some(30.0),
             protected: None,
+            fresh: None,
         });
         assert_eq!(config.idle.after_minutes, 30.0);
     }

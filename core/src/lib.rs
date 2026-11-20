@@ -6,6 +6,7 @@
 
 pub mod actions;
 pub mod activity;
+pub mod cache;
 pub mod classify;
 pub mod config;
 pub mod consumers;

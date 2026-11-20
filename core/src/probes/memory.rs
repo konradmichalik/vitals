@@ -11,9 +11,13 @@ pub fn pressure_level() -> Result<PressureLevel, VitalsError> {
     parse(&raw)
 }
 
+/// Installed memory cannot change while the machine is up.
 pub fn total_bytes() -> Result<u64, VitalsError> {
-    let raw = super::shell::run("sysctl", &["-n", "hw.memsize"])?;
-    parse_total_bytes(&raw)
+    static CACHE: crate::cache::Ttl<u64> = crate::cache::Ttl::sticky();
+    CACHE.get_or_try(std::time::Duration::from_secs(86_400), || {
+        let raw = super::shell::run("sysctl", &["-n", "hw.memsize"])?;
+        parse_total_bytes(&raw)
+    })
 }
 
 fn parse_total_bytes(raw: &str) -> Result<u64, VitalsError> {

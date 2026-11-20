@@ -11,69 +11,64 @@ use crate::{activity, classify, consumers, probes, types};
 /// needs entries (e.g. a `mutagen` process) that never make it into the
 /// curated §6 JSON contract.
 pub fn collect(config: &Config) -> Result<(types::VitalsReport, Vec<ProcessEntry>), VitalsError> {
-    let uptime_seconds = probes::uptime::seconds()?;
-    let load = probes::load::read()?;
-    let cores = probes::cores::read()?;
-
-    let vm_stat = probes::vm_stat::read()?;
-    let swap = probes::swap::read()?;
-    let total_bytes = probes::memory::total_bytes()?;
-    let free_bytes = vm_stat.free_pages * vm_stat.page_size_bytes;
-
-    let memory = types::MemoryInfo {
-        pressure_level: probes::memory::pressure_level()?,
-        free_percent: percent_of(free_bytes, total_bytes),
-        used_percent: percent_of(vm_stat.used_bytes(), total_bytes),
-        page_size_bytes: vm_stat.page_size_bytes,
-        compressor_bytes: vm_stat.compressor_bytes(),
-        swap_used_bytes: swap.used_bytes,
-        pageouts: vm_stat.pageouts,
-        total_bytes,
-        available_bytes: total_bytes.saturating_sub(vm_stat.used_bytes()),
-    };
-
-    let cpu = probes::cpu::read()?;
+    // The slow probes (Docker, DDEV, Time Machine, `top`) do not depend
+    // on each other, so they run side by side while this thread reads
+    // the rest. Collection then takes as long as the slowest probe, not
+    // as long as all of them added up.
+    let (docker, ddev_projects, time_machine, cpu, local) = std::thread::scope(|scope| {
+        let docker = scope.spawn(collect_docker);
+        let ddev = scope.spawn(probes::ddev::list);
+        let time_machine = scope.spawn(|| collect_time_machine(config));
+        let cpu = scope.spawn(probes::cpu::read);
+        let local = collect_local();
+        (
+            join(docker),
+            join(ddev),
+            join(time_machine),
+            join(cpu),
+            local,
+        )
+    });
+    let docker = docker?;
+    let ddev_projects = ddev_projects?;
+    let time_machine = time_machine?;
+    let Local {
+        uptime_seconds,
+        load,
+        cores,
+        memory,
+        process_entries,
+        claude_sessions,
+        tree,
+    } = local?;
 
     let system = types::SystemInfo {
         uptime_seconds,
         load,
         cores,
         memory,
-        cpu,
+        cpu: cpu?,
     };
 
-    let tm_status = probes::time_machine::status()?;
-    let time_machine = types::TimeMachineInfo {
-        running: tm_status.running,
-        phase: tm_status.phase,
-        changed_item_count: tm_status.changed_item_count,
-        exclusions: probes::time_machine::check_exclusions(&config.watch.timemachine_exclusions)?,
-    };
-
-    let ddev_projects = probes::ddev::list()?;
     let mut ddev = probes::ddev::summarize(&ddev_projects);
+    ddev.projects = ddev_project_infos(
+        &ddev_projects,
+        &docker.containers,
+        config,
+        activity::now_unix(),
+    );
 
-    let dangling_images = probes::docker::dangling_images()?;
-    let docker = types::DockerInfo {
-        containers: probes::docker::list()?,
-        dangling_image_count: dangling_images.count,
-        reclaimable_bytes: dangling_images.reclaimable_bytes,
-    };
-
-    let now = activity::now_unix();
-    ddev.projects = ddev_project_infos(&ddev_projects, &docker.containers, config, now);
-
-    let process_entries = probes::processes::list()?;
     let processes = types::ProcessesInfo {
-        claude_sessions: claude_sessions(&process_entries),
+        claude_sessions,
         acp_agents: classify::acp_agents(&process_entries, &config.ide.retired_versions),
-        orbstack: probes::orbstack::find()?,
+        orbstack: probes::orbstack::from_processes(&process_entries),
         top_by_cpu: top_processes(&process_entries, 5),
     };
 
     let home = std::env::var("HOME").ok();
     let groups = consumers::groups(&consumers::Inputs {
         processes: &process_entries,
+        tree: &tree,
         sessions: &processes.claude_sessions,
         acp_agents: &processes.acp_agents,
         containers: &docker.containers,
@@ -102,6 +97,83 @@ pub fn collect(config: &Config) -> Result<(types::VitalsReport, Vec<ProcessEntry
     report.consumers = groups;
 
     Ok((report, process_entries))
+}
+
+/// A probe thread that panicked is reported like any other failed probe.
+fn join<T>(
+    handle: std::thread::ScopedJoinHandle<'_, Result<T, VitalsError>>,
+) -> Result<T, VitalsError> {
+    handle
+        .join()
+        .unwrap_or_else(|_| Err(VitalsError::parse("probe", "a probe thread panicked")))
+}
+
+fn collect_docker() -> Result<types::DockerInfo, VitalsError> {
+    let dangling_images = probes::docker::dangling_images()?;
+    Ok(types::DockerInfo {
+        containers: probes::docker::list()?,
+        dangling_image_count: dangling_images.count,
+        reclaimable_bytes: dangling_images.reclaimable_bytes,
+    })
+}
+
+fn collect_time_machine(config: &Config) -> Result<types::TimeMachineInfo, VitalsError> {
+    let status = probes::time_machine::status()?;
+    Ok(types::TimeMachineInfo {
+        running: status.running,
+        phase: status.phase,
+        changed_item_count: status.changed_item_count,
+        exclusions: probes::time_machine::check_exclusions(&config.watch.timemachine_exclusions)?,
+    })
+}
+
+/// Everything read on the calling thread: cheap system counters and the
+/// process table with the Claude sessions found in it.
+struct Local {
+    uptime_seconds: u64,
+    load: types::LoadAverage,
+    cores: types::CoreCount,
+    memory: types::MemoryInfo,
+    process_entries: Vec<ProcessEntry>,
+    claude_sessions: Vec<types::ClaudeSession>,
+    tree: consumers::ProcessTree,
+}
+
+fn collect_local() -> Result<Local, VitalsError> {
+    let uptime_seconds = probes::uptime::seconds()?;
+    let load = probes::load::read()?;
+    let cores = probes::cores::read()?;
+
+    let vm_stat = probes::vm_stat::read()?;
+    let swap = probes::swap::read()?;
+    let total_bytes = probes::memory::total_bytes()?;
+    let free_bytes = vm_stat.free_pages * vm_stat.page_size_bytes;
+
+    let memory = types::MemoryInfo {
+        pressure_level: probes::memory::pressure_level()?,
+        free_percent: percent_of(free_bytes, total_bytes),
+        used_percent: percent_of(vm_stat.used_bytes(), total_bytes),
+        page_size_bytes: vm_stat.page_size_bytes,
+        compressor_bytes: vm_stat.compressor_bytes(),
+        swap_used_bytes: swap.used_bytes,
+        pageouts: vm_stat.pageouts,
+        total_bytes,
+        available_bytes: total_bytes.saturating_sub(vm_stat.used_bytes()),
+    };
+
+    let process_entries = probes::processes::list()?;
+    let tree = consumers::ProcessTree::new(&process_entries);
+    let claude_sessions = claude_sessions(&process_entries, &tree);
+
+    Ok(Local {
+        uptime_seconds,
+        load,
+        cores,
+        memory,
+        process_entries,
+        claude_sessions,
+        tree,
+    })
 }
 
 /// Joins `ddev list` with the containers' live usage, and records which
@@ -143,8 +215,11 @@ fn ddev_project_infos(
         .collect();
 
     if let Some(path) = activity::default_path() {
-        let state = activity::update(&activity::load(&path), &observations, now);
-        activity::save(&path, &state);
+        let stored = activity::load(&path);
+        let state = activity::update(&stored, &observations, now);
+        if activity::needs_save(&stored, &state) {
+            activity::save(&path, &state);
+        }
         for info in infos.iter_mut().filter(|info| info.status == "running") {
             info.idle_seconds = activity::idle_seconds(&state, &format!("ddev:{}", info.name), now);
         }
@@ -157,16 +232,25 @@ fn ddev_project_infos(
 /// "claude"`) — confirming each candidate and getting its version needs
 /// an actual process lookup, which belongs here alongside the other
 /// I/O-performing probe calls, not in the pure `classify` module.
-fn claude_sessions(processes: &[ProcessEntry]) -> Vec<types::ClaudeSession> {
+fn claude_sessions(
+    processes: &[ProcessEntry],
+    tree: &consumers::ProcessTree,
+) -> Vec<types::ClaudeSession> {
+    let now = activity::now_unix();
+    let system_now = std::time::SystemTime::now();
+    let running: std::collections::HashSet<u32> = processes.iter().map(|p| p.pid).collect();
+    probes::claude_cli::forget_except(&running);
+
     classify::claude_session_candidates(processes)
         .into_iter()
         .filter_map(|process| {
-            let info = probes::claude_cli::resolve(process.pid)?;
-            let idle_seconds = info.working_directory.as_deref().and_then(|dir| {
-                probes::transcripts::seconds_since_last_write(dir, std::time::SystemTime::now())
-            });
+            let info = probes::claude_cli::resolve_cached(process.pid, process.etime_seconds, now)?;
+            let idle_seconds = info
+                .working_directory
+                .as_deref()
+                .and_then(|dir| probes::transcripts::seconds_since_last_write(dir, system_now));
             Some(types::ClaudeSession {
-                tree_rss_bytes: consumers::tree_rss(processes, process.pid),
+                tree_rss_bytes: tree.rss(process.pid),
                 idle_seconds,
                 pid: process.pid,
                 etime_seconds: process.etime_seconds,

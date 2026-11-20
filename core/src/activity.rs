@@ -61,6 +61,26 @@ pub fn update(state: &ActivityState, observations: &[Observation], now: u64) -> 
     ActivityState { entries }
 }
 
+/// How stale `last_seen` may get on disk. Well below the observation
+/// gap, so skipping writes can never look like vitals was not running.
+pub const MAX_UNSAVED_SECONDS: u64 = 120;
+
+/// The app polls every few seconds and most rounds change nothing but
+/// `last_seen`. Writing the file only when a project became active, the
+/// set of projects changed, or the stored timestamps are getting old
+/// keeps the monitor from producing its own steady disk writes.
+pub fn needs_save(stored: &ActivityState, updated: &ActivityState) -> bool {
+    if stored.entries.len() != updated.entries.len() {
+        return true;
+    }
+    updated.entries.iter().any(|(key, new)| {
+        stored.entries.get(key).is_none_or(|old| {
+            old.last_active != new.last_active
+                || new.last_seen.saturating_sub(old.last_seen) >= MAX_UNSAVED_SECONDS
+        })
+    })
+}
+
 pub fn idle_seconds(state: &ActivityState, key: &str, now: u64) -> Option<u64> {
     state
         .entries
@@ -143,6 +163,24 @@ mod tests {
         let later = 1000 + MAX_OBSERVATION_GAP_SECONDS + 1;
         let s2 = update(&s1, &[obs("ddev:witte", false)], later);
         assert_eq!(idle_seconds(&s2, "ddev:witte", later), Some(0));
+    }
+
+    #[test]
+    fn saves_only_when_activity_or_membership_changed_or_the_file_is_getting_old() {
+        let s1 = update(&ActivityState::default(), &[obs("ddev:witte", false)], 1000);
+        assert!(needs_save(&ActivityState::default(), &s1));
+
+        let quiet = update(&s1, &[obs("ddev:witte", false)], 1030);
+        assert!(!needs_save(&s1, &quiet));
+
+        let active = update(&s1, &[obs("ddev:witte", true)], 1030);
+        assert!(needs_save(&s1, &active));
+
+        let old = update(&s1, &[obs("ddev:witte", false)], 1000 + MAX_UNSAVED_SECONDS);
+        assert!(needs_save(&s1, &old));
+
+        let swapped = update(&s1, &[obs("ddev:verdi", false)], 1030);
+        assert!(needs_save(&s1, &swapped));
     }
 
     #[test]

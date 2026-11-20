@@ -20,7 +20,31 @@ pub fn status() -> Result<TmStatus, VitalsError> {
     parse_status(&raw)
 }
 
+/// Exclusions change only when someone edits them; the app invalidates
+/// the cache after its own `add_exclusions`.
 pub fn check_exclusions(paths: &[String]) -> Result<Vec<TmExclusion>, VitalsError> {
+    static CACHE: crate::cache::KeyedTtl<Vec<String>, Vec<TmExclusion>> =
+        crate::cache::KeyedTtl::new();
+    let key = paths.to_vec();
+    CACHE.retain(|cached| *cached == key);
+    let mut failure = None;
+    let result = CACHE.get_or(&key, std::time::Duration::from_secs(300), || {
+        check_exclusions_uncached(paths).unwrap_or_else(|err| {
+            failure = Some(err);
+            Vec::new()
+        })
+    });
+    match failure {
+        Some(err) => {
+            // A failed lookup must not be served from the cache next time.
+            CACHE.retain(|_| false);
+            Err(err)
+        }
+        None => Ok(result),
+    }
+}
+
+fn check_exclusions_uncached(paths: &[String]) -> Result<Vec<TmExclusion>, VitalsError> {
     if paths.is_empty() {
         return Ok(Vec::new());
     }
@@ -63,7 +87,7 @@ fn parse_status(raw: &str) -> Result<TmStatus, VitalsError> {
     })
 }
 
-fn expand_tilde(path: &str) -> String {
+pub(crate) fn expand_tilde(path: &str) -> String {
     match path.strip_prefix("~/") {
         Some(rest) => match std::env::var("HOME") {
             Ok(home) => format!("{home}/{rest}"),

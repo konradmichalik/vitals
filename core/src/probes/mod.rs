@@ -25,6 +25,18 @@ pub mod vm_stat;
 
 pub(crate) mod shell;
 
+/// True when a tool is not installed, its backend is not running, or it
+/// did not answer in time — the cases an optional data source (DDEV,
+/// Docker) should degrade on instead of failing the whole report.
+pub(crate) fn is_unavailable(err: &crate::error::VitalsError) -> bool {
+    use crate::error::VitalsError;
+    match err {
+        VitalsError::CommandFailed { source, .. } => source.kind() == std::io::ErrorKind::NotFound,
+        VitalsError::CommandExitedWithError { .. } | VitalsError::Timeout { .. } => true,
+        _ => false,
+    }
+}
+
 /// Shared by every probe that shells out to a `--json`/JSON-Lines command
 /// (`ddev list`, `docker ps`, `docker stats`) and needs a specific string
 /// field out of a `serde_json::Value` record, erroring with the same
