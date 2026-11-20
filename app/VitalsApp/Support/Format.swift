@@ -20,13 +20,10 @@ enum Format {
         }
     }
 
-    static func clock(_ date: Date) -> String {
-        clockFormatter.string(from: date)
+    /// 24-hour "HH:mm" without a shared formatter: `DateFormatter` is not
+    /// `Sendable`, so a static one would not pass strict concurrency.
+    static func clock(_ date: Date, calendar: Calendar = .current) -> String {
+        let parts = calendar.dateComponents([.hour, .minute], from: date)
+        return String(format: "%02d:%02d", parts.hour ?? 0, parts.minute ?? 0)
     }
-
-    private static let clockFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "HH:mm"
-        return formatter
-    }()
 }
