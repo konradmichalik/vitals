@@ -62,12 +62,16 @@ pub struct Overrides {
 impl Config {
     pub fn with_overrides(mut self, overrides: &Overrides) -> Self {
         if let Some(minutes) = overrides.idle_after_minutes {
-            if minutes > 0.0 {
+            if valid_idle_minutes(minutes) {
                 self.idle.after_minutes = minutes;
             }
         }
         if let Some(protected) = &overrides.protected {
-            self.idle.protected = protected.clone();
+            for entry in protected {
+                if !self.idle.protected.contains(entry) {
+                    self.idle.protected.push(entry.clone());
+                }
+            }
         }
         self
     }
@@ -201,11 +205,20 @@ fn load_from(path: &Path) -> Result<Config, VitalsError> {
     }
 }
 
+/// A zero, negative or non-finite threshold would mark every item idle.
+fn valid_idle_minutes(minutes: f64) -> bool {
+    minutes.is_finite() && minutes > 0.0
+}
+
 fn parse(toml_str: &str, path: &Path) -> Result<Config, VitalsError> {
-    toml::from_str(toml_str).map_err(|err| VitalsError::ConfigError {
+    let mut config: Config = toml::from_str(toml_str).map_err(|err| VitalsError::ConfigError {
         path: path.display().to_string(),
         reason: err.to_string(),
-    })
+    })?;
+    if !valid_idle_minutes(config.idle.after_minutes) {
+        config.idle.after_minutes = IdleConfig::default().after_minutes;
+    }
+    Ok(config)
 }
 
 #[cfg(test)]
@@ -319,6 +332,39 @@ protected = ["witte", "~/Sites/vitals"]
             IdleConfig::default().ddev_cpu_percent
         );
         assert_eq!(config.idle.protected, vec!["witte", "~/Sites/vitals"]);
+    }
+
+    #[test]
+    fn nonsense_idle_minutes_in_the_file_fall_back_to_the_default() {
+        for value in ["0", "-5", "nan", "inf"] {
+            let config = parse(
+                &format!("[idle]\nafter_minutes = {value}\n"),
+                Path::new("test.toml"),
+            )
+            .unwrap();
+            assert_eq!(config.idle.after_minutes, 120.0, "after_minutes = {value}");
+        }
+    }
+
+    #[test]
+    fn overridden_protection_adds_to_the_file_instead_of_replacing_it() {
+        let mut config = Config::default();
+        config.idle.protected = vec!["witte".to_string(), "verdi".to_string()];
+        let config = config.with_overrides(&Overrides {
+            idle_after_minutes: None,
+            protected: Some(vec!["verdi".to_string(), "new".to_string()]),
+            fresh: None,
+        });
+        assert_eq!(config.idle.protected, vec!["witte", "verdi", "new"]);
+
+        let mut config = Config::default();
+        config.idle.protected = vec!["witte".to_string()];
+        let config = config.with_overrides(&Overrides {
+            idle_after_minutes: None,
+            protected: Some(Vec::new()),
+            fresh: None,
+        });
+        assert_eq!(config.idle.protected, vec!["witte"]);
     }
 
     #[test]
