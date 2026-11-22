@@ -96,6 +96,15 @@ final class GuardPolicyTests: XCTestCase {
         let short = points.prefix(3).reversed().map { $0 }
         XCTAssertFalse(SustainedCheck.isSustained(short, above: 90, for: 300, now: now))
     }
+
+    func testSustainedCheckRejectsAWindowWithAGapInObservation() {
+        let now = Date()
+        let hot = { (offset: Double) in SustainedCheck.Point(date: now.addingTimeInterval(-offset), value: 95) }
+        let relaunched = [hot(600), hot(570), hot(30), hot(0)]
+        XCTAssertFalse(SustainedCheck.isSustained(relaunched, above: 90, for: 600, now: now))
+        let stalled = (0...10).map { hot(Double($0) * 30 + 400) }.reversed().map { $0 }
+        XCTAssertFalse(SustainedCheck.isSustained(stalled, above: 90, for: 700, now: now))
+    }
 }
 
 final class AppSettingsTests: XCTestCase {

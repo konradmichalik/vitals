@@ -75,6 +75,8 @@ enum AppNotifier {
         kind: Kind,
         category: String? = nil
     ) {
+        // The test host has no bundle identifier, which crashes the notification center.
+        guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else { return }
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body

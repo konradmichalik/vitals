@@ -54,9 +54,9 @@ enum MetricHistory {
     /// Sparklines are meant as an at-a-glance recent trend, not a full
     /// history — capped so `AppState`'s buffer can't grow unbounded over
     /// a long-running session.
-    /// One hour at the 10 s alert interval — the longest range the
+    /// One hour at the fastest refresh (5 s), the longest range the
     /// history screen offers.
-    static let maxSamples = 360
+    static let maxSamples = 720
 
     /// How far back a restored sample may reach. History is persisted so
     /// a restart doesn't wipe the trend, but samples from a run that

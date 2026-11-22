@@ -36,11 +36,17 @@ enum SustainedCheck {
         let value: Double?
     }
 
+    /// Samples further apart than this mean the app was not running or
+    /// the Mac was asleep, so the stretch in between was never observed.
+    static let maxGap: TimeInterval = 120
+
     static func isSustained(_ points: [Point], above limit: Double, for window: TimeInterval, now: Date) -> Bool {
         let recent = points.filter { now.timeIntervalSince($0.date) <= window }
         guard let oldest = recent.first?.date, now.timeIntervalSince(oldest) >= window * 0.9 else {
             return false
         }
-        return recent.allSatisfy { ($0.value ?? 0) >= limit }
+        let dates = recent.map(\.date) + [now]
+        let observedContinuously = zip(dates, dates.dropFirst()).allSatisfy { $1.timeIntervalSince($0) <= maxGap }
+        return observedContinuously && recent.allSatisfy { ($0.value ?? 0) >= limit }
     }
 }
