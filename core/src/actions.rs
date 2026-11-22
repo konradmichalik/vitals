@@ -192,9 +192,10 @@ impl Action {
                 args.extend(expanded.iter().map(String::as_str));
                 shell::run("tmutil", &args).map(drop)
             }
-            Action::KillOrphanedAgents(pids) => pids
-                .iter()
-                .try_for_each(|&pid| terminate_with_escalation(pid)),
+            Action::KillOrphanedAgents(pids) => pids.iter().try_for_each(|&pid| {
+                ensure_agent_process(pid)?;
+                terminate_with_escalation(pid)
+            }),
             Action::KillRunawayProcesses(pids) => pids
                 .iter()
                 .try_for_each(|&pid| terminate_with_escalation(pid)),
@@ -420,6 +421,22 @@ mod tests {
         ));
         assert!(!is_agent_command("/usr/bin/ssh", "ssh claude@host"));
         assert!(!is_agent_command("", ""));
+    }
+
+    #[test]
+    fn orphan_cleanup_leaves_a_reused_pid_alone() {
+        let mut child = std::process::Command::new("sleep")
+            .arg("30")
+            .spawn()
+            .expect("spawn sleep");
+        let err = Action::KillOrphanedAgents(vec![child.id()])
+            .execute()
+            .unwrap_err();
+        let still_running = child.try_wait().expect("wait").is_none();
+        let _ = child.kill();
+        let _ = child.wait();
+        assert!(err.to_string().contains("not a Claude Code session"));
+        assert!(still_running);
     }
 
     #[test]

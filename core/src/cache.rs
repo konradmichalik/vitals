@@ -74,11 +74,12 @@ impl<T: Clone> Ttl<T> {
                 return Ok(value);
             }
         }
+        let started = epoch();
         let value = compute()?;
         if let Ok(mut guard) = self.slot.lock() {
             *guard = Some(Entry {
                 stored: Instant::now(),
-                epoch: epoch(),
+                epoch: started,
                 value: value.clone(),
             });
         }
@@ -118,13 +119,14 @@ impl<K: Eq + Hash + Clone, V: Clone> KeyedTtl<K, V> {
                 return value;
             }
         }
+        let started = epoch();
         let value = compute();
         if let Ok(mut guard) = self.map.lock() {
             guard.get_or_insert_with(HashMap::new).insert(
                 key.clone(),
                 Entry {
                     stored: Instant::now(),
-                    epoch: epoch(),
+                    epoch: started,
                     value: value.clone(),
                 },
             );
@@ -190,6 +192,26 @@ mod tests {
         assert_eq!(read(), Ok(1));
         invalidate_all();
         assert_eq!(read(), Ok(2));
+    }
+
+    #[test]
+    fn a_value_computed_across_an_invalidation_is_not_served_afterwards() {
+        let _guard = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+        let ttl = Duration::from_secs(60);
+        let cache: Ttl<u32> = Ttl::new();
+        let stale = cache.get_or_try(ttl, || {
+            invalidate_all();
+            Ok::<u32, ()>(1)
+        });
+        assert_eq!(stale, Ok(1));
+        assert_eq!(cache.get_or_try(ttl, || Ok::<u32, ()>(2)), Ok(2));
+
+        let keyed: KeyedTtl<u8, u32> = KeyedTtl::new();
+        keyed.get_or(&1, ttl, || {
+            invalidate_all();
+            1
+        });
+        assert_eq!(keyed.get_or(&1, ttl, || 2), 2);
     }
 
     #[test]
