@@ -12,6 +12,84 @@ struct VitalsReport: Codable {
     let docker: DockerInfo
     let processes: ProcessesInfo
     let findings: [Finding]
+    // Added in schema 4. Optional so older payloads and the memberwise
+    // initializers in the tests keep working; read through the
+    // non-optional accessors below.
+    var disk: DiskInfo?
+    var consumers: [ConsumerGroup]?
+    var quickWins: [QuickWin]?
+    var incidents: [Incident]?
+
+    var consumerGroups: [ConsumerGroup] { consumers ?? [] }
+    var quickWinList: [QuickWin] { quickWins ?? [] }
+    var incidentList: [Incident] { incidents ?? [] }
+    var idleBytes: UInt64 { consumerGroups.reduce(0) { $0 + $1.idleBytes } }
+}
+
+struct DiskInfo: Codable {
+    let totalBytes: UInt64?
+}
+
+struct ConsumerGroup: Codable, Identifiable {
+    let id: String
+    let name: String
+    let memBytes: UInt64
+    let cpuPercent: Double
+    let idleBytes: UInt64
+    let items: [ConsumerItem]
+
+    var idleItems: [ConsumerItem] { items.filter { $0.idle && !$0.protected } }
+}
+
+struct ConsumerItem: Codable, Identifiable {
+    let id: String
+    let name: String
+    let detail: String
+    let memBytes: UInt64
+    let cpuPercent: Double
+    let idle: Bool
+    let idleSeconds: UInt64?
+    let protected: Bool
+    let action: ItemAction?
+}
+
+struct ItemAction: Codable, Equatable {
+    let action: String
+    let target: String?
+    let label: String
+    let confirm: Bool
+}
+
+struct QuickWin: Codable, Identifiable {
+    let id: String
+    let title: String
+    let detail: String
+    let reclaimableBytes: UInt64
+    let action: String
+    let targets: [String]
+    let label: String
+    let confirm: Bool
+    let undoAction: String?
+}
+
+struct Incident: Codable, Identifiable {
+    let file: String
+    let date: String
+    let largestProcess: String?
+    let pageSizeBytes: UInt64
+    let killed: [IncidentProcess]
+    let top: [IncidentProcess]
+
+    var id: String { file }
+}
+
+struct IncidentProcess: Codable, Identifiable {
+    let pid: UInt32?
+    let name: String
+    let bytes: UInt64
+    let reason: String?
+
+    var id: String { "\(pid ?? 0)-\(name)-\(bytes)" }
 }
 
 struct SystemInfo: Codable {
@@ -54,6 +132,8 @@ struct MemoryInfo: Codable {
     let compressorBytes: UInt64
     let swapUsedBytes: UInt64
     let pageouts: UInt64
+    var totalBytes: UInt64?
+    var availableBytes: UInt64?
 }
 
 struct TimeMachineInfo: Codable {
@@ -73,6 +153,16 @@ struct DdevInfo: Codable {
     let problems: [String]
     let pausedCount: UInt32
     let stoppedCount: UInt32
+    var projects: [DdevProjectInfo]?
+}
+
+struct DdevProjectInfo: Codable {
+    let name: String
+    let status: String
+    let approot: String
+    let memBytes: UInt64
+    let cpuPercent: Double
+    let idleSeconds: UInt64?
 }
 
 struct DockerInfo: Codable {
@@ -113,6 +203,8 @@ struct ClaudeSession: Codable, Identifiable {
     let kind: String
     let version: String
     let workingDirectory: String?
+    var treeRssBytes: UInt64?
+    var idleSeconds: UInt64?
 
     var id: UInt32 { pid }
 

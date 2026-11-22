@@ -13,6 +13,34 @@
 use crate::error::VitalsError;
 use crate::types::OrbstackProcess;
 
+/// Same aggregation as [`find`], from a process table that was already
+/// read — report collection has one anyway, so this saves a third `ps`.
+pub fn from_processes(
+    processes: &[crate::probes::processes::ProcessEntry],
+) -> Option<OrbstackProcess> {
+    processes
+        .iter()
+        .filter(|p| p.comm.contains("/OrbStack.app/"))
+        .fold(None, |aggregate: Option<OrbstackProcess>, p| {
+            Some(match aggregate {
+                None => OrbstackProcess {
+                    pid: p.pid,
+                    cpu_percent: p.cpu_percent,
+                    rss_bytes: p.rss_bytes,
+                },
+                Some(existing) => OrbstackProcess {
+                    pid: if p.cpu_percent > existing.cpu_percent {
+                        p.pid
+                    } else {
+                        existing.pid
+                    },
+                    cpu_percent: existing.cpu_percent + p.cpu_percent,
+                    rss_bytes: existing.rss_bytes + p.rss_bytes,
+                },
+            })
+        })
+}
+
 pub fn find() -> Result<Option<OrbstackProcess>, VitalsError> {
     let raw = super::shell::run("ps", &["-eo", "pid,%cpu,rss,comm"])?;
     parse(&raw)
@@ -67,6 +95,39 @@ fn parse(raw: &str) -> Result<Option<OrbstackProcess>, VitalsError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn aggregates_from_an_existing_process_table() {
+        let entry = |pid, comm: &str, cpu, rss| crate::probes::processes::ProcessEntry {
+            pid,
+            ppid: 1,
+            etime_seconds: 60,
+            cpu_percent: cpu,
+            rss_bytes: rss,
+            comm: comm.to_string(),
+            command: comm.to_string(),
+        };
+        let processes = vec![
+            entry(
+                1,
+                "/Applications/OrbStack.app/Contents/MacOS/OrbStack",
+                0.5,
+                100,
+            ),
+            entry(
+                2,
+                "/Applications/OrbStack.app/Contents/Frameworks/OrbStack Helper",
+                40.0,
+                900,
+            ),
+            entry(3, "/usr/libexec/logd", 9.0, 5),
+        ];
+        let orbstack = from_processes(&processes).unwrap();
+        assert_eq!(orbstack.pid, 2);
+        assert_eq!(orbstack.cpu_percent, 40.5);
+        assert_eq!(orbstack.rss_bytes, 1000);
+        assert!(from_processes(&processes[2..]).is_none());
+    }
 
     #[test]
     fn finds_orbstack_process_by_path() {

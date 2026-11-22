@@ -3,7 +3,7 @@ use std::process::ExitCode;
 
 use clap::Parser;
 use vitals_core::actions::Action;
-use vitals_core::config::Config;
+use vitals_core::config::{Config, Overrides};
 use vitals_core::probes::processes::ProcessEntry;
 use vitals_core::types::{Finding, Severity, VitalsReport};
 
@@ -19,15 +19,33 @@ struct Cli {
     #[arg(long)]
     no_color: bool,
 
-    /// Apply a remediation action: poweroff, stop_project, stop_backup,
-    /// add_exclusions, kill_orphaned_agents, kill_runaway_processes,
-    /// kill_session, prune_docker_images
+    /// Apply a remediation action: poweroff, stop_project, start_project,
+    /// stop_backup, add_exclusions, kill_orphaned_agents,
+    /// kill_runaway_processes, kill_session, prune_docker_images, quit_app,
+    /// restart_app, free_idle
     #[arg(long, value_name = "ACTION")]
     fix: Option<String>,
 
-    /// Target for actions that need one (a DDEV project name or a PID)
+    /// Target for actions that need one (a DDEV project name, a PID or an
+    /// app name). stop_project, start_project and kill_session accept
+    /// several, separated by commas.
     #[arg(long, value_name = "VALUE")]
     target: Option<String>,
+
+    /// What `--fix free_idle` may free: any of ddev, agents, orphans,
+    /// separated by commas. Defaults to all three.
+    #[arg(long, value_name = "LIST")]
+    scope: Option<String>,
+
+    /// Minutes without activity before a project or session counts as
+    /// idle. Overrides `idle.after_minutes` from ~/.vitals.toml.
+    #[arg(long, value_name = "MINUTES")]
+    idle_minutes: Option<f64>,
+
+    /// Project names or session directories that are never freed,
+    /// separated by commas. Replaces `idle.protected` from ~/.vitals.toml.
+    #[arg(long, value_name = "LIST")]
+    protect: Option<String>,
 
     /// Show what an action would do without executing it
     #[arg(long)]
@@ -43,8 +61,13 @@ fn main() -> ExitCode {
     let cli = Cli::parse();
     let use_color = !cli.no_color && std::io::stdout().is_terminal();
 
+    let overrides = Overrides {
+        idle_after_minutes: cli.idle_minutes,
+        protected: cli.protect.as_deref().map(split_list),
+        fresh: None,
+    };
     let config = match vitals_core::config::load() {
-        Ok(config) => config,
+        Ok(config) => config.with_overrides(&overrides),
         Err(err) => {
             report_error(&err, cli.json, use_color);
             return ExitCode::FAILURE;
@@ -55,6 +78,7 @@ fn main() -> ExitCode {
         return run_fix(
             action_name,
             cli.target.as_deref(),
+            cli.scope.as_deref(),
             cli.dry_run,
             cli.yes,
             &config,
@@ -83,17 +107,29 @@ fn main() -> ExitCode {
     }
 }
 
+fn split_list(raw: &str) -> Vec<String> {
+    raw.split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+        .collect()
+}
+
+#[allow(clippy::too_many_arguments)]
 fn run_fix(
     action_name: &str,
     target: Option<&str>,
+    scope: Option<&str>,
     dry_run: bool,
     yes: bool,
     config: &Config,
     json: bool,
     use_color: bool,
 ) -> ExitCode {
-    let needs_process_snapshot =
-        action_name == "kill_orphaned_agents" || action_name == "kill_runaway_processes";
+    let needs_process_snapshot = matches!(
+        action_name,
+        "kill_orphaned_agents" | "kill_runaway_processes" | "free_idle"
+    );
     let (report, processes) = if needs_process_snapshot {
         match vitals_core::report::collect(config) {
             Ok((report, processes)) => (Some(report), Some(processes)),
@@ -109,6 +145,7 @@ fn run_fix(
     let action = match build_action(
         action_name,
         target,
+        scope,
         report.as_ref(),
         processes.as_deref(),
         config,
@@ -119,6 +156,13 @@ fn run_fix(
             return ExitCode::FAILURE;
         }
     };
+
+    // Checked before the dry run as well, so a preview never shows a
+    // command that the real run would refuse.
+    if let Err(message) = action.validate() {
+        eprintln!("vitals: {message}");
+        return ExitCode::FAILURE;
+    }
 
     if dry_run {
         println!("Would run: {}", action.describe());
@@ -163,6 +207,7 @@ fn confirm(action: &Action) -> bool {
 fn build_action(
     name: &str,
     target: Option<&str>,
+    scope: Option<&str>,
     report: Option<&VitalsReport>,
     processes: Option<&[ProcessEntry]>,
     config: &Config,
@@ -209,15 +254,36 @@ fn build_action(
             Ok(Action::KillRunawayProcesses(pids))
         }
         "stop_project" => {
-            let name = target.ok_or("`stop_project` requires --target <project-name>")?;
-            Ok(Action::StopProject(name.to_string()))
+            let names = targets(target, "`stop_project` requires --target <project-name>")?;
+            Ok(batch(names.into_iter().map(Action::StopProject).collect()))
+        }
+        "start_project" => {
+            let names = targets(target, "`start_project` requires --target <project-name>")?;
+            Ok(batch(names.into_iter().map(Action::StartProject).collect()))
         }
         "kill_session" => {
-            let pid = target.ok_or("`kill_session` requires --target <pid>")?;
-            let pid: u32 = pid
-                .parse()
-                .map_err(|_| format!("`{pid}` is not a valid PID"))?;
-            Ok(Action::KillSession(pid))
+            let raw = targets(target, "`kill_session` requires --target <pid>")?;
+            let pids = raw
+                .iter()
+                .map(|pid| {
+                    pid.parse::<u32>()
+                        .map_err(|_| format!("`{pid}` is not a valid PID"))
+                })
+                .collect::<Result<Vec<u32>, String>>()?;
+            Ok(batch(pids.into_iter().map(Action::KillSession).collect()))
+        }
+        "quit_app" | "restart_app" => {
+            let app = target.ok_or(format!("`{name}` requires --target <app-name>"))?;
+            Action::validate_app_name(app)?;
+            Ok(if name == "quit_app" {
+                Action::QuitApp(app.to_string())
+            } else {
+                Action::RestartApp(app.to_string())
+            })
+        }
+        "free_idle" => {
+            let report = report.ok_or("internal error: no report collected for free_idle")?;
+            free_idle(report, scope)
         }
         "prune_docker_images" => Ok(Action::PruneDockerImages),
         other => Err(format!(
@@ -225,6 +291,57 @@ fn build_action(
             vitals_core::actions::ACTION_NAMES.join(", ")
         )),
     }
+}
+
+fn targets(target: Option<&str>, missing: &str) -> Result<Vec<String>, String> {
+    let list = target.map(split_list).unwrap_or_default();
+    if list.is_empty() {
+        return Err(missing.to_string());
+    }
+    Ok(list)
+}
+
+fn batch(mut actions: Vec<Action>) -> Action {
+    if actions.len() == 1 {
+        actions.remove(0)
+    } else {
+        Action::Batch(actions)
+    }
+}
+
+const FREE_IDLE_SCOPES: &[&str] = &["ddev", "agents", "orphans"];
+
+/// Re-derives the idle set from a fresh report, exactly as the quick wins
+/// were derived, so a stale list from an earlier poll can never decide
+/// what gets stopped.
+fn free_idle(report: &VitalsReport, scope: Option<&str>) -> Result<Action, String> {
+    let scopes = scope
+        .map(split_list)
+        .unwrap_or_else(|| FREE_IDLE_SCOPES.iter().map(|s| s.to_string()).collect());
+    if let Some(unknown) = scopes
+        .iter()
+        .find(|s| !FREE_IDLE_SCOPES.contains(&s.as_str()))
+    {
+        return Err(format!(
+            "unknown scope `{unknown}` (expected any of: {})",
+            FREE_IDLE_SCOPES.join(", ")
+        ));
+    }
+    let idle = vitals_core::consumers::idle_targets(&report.consumers);
+    let mut actions = Vec::new();
+    if scopes.iter().any(|s| s == "ddev") {
+        actions.extend(idle.ddev_projects.into_iter().map(Action::StopProject));
+    }
+    if scopes.iter().any(|s| s == "agents") {
+        actions.extend(idle.session_pids.into_iter().map(Action::KillSession));
+    }
+    if scopes.iter().any(|s| s == "orphans") && !idle.orphaned_agent_pids.is_empty() {
+        actions.push(Action::KillOrphanedAgents(idle.orphaned_agent_pids));
+    }
+    if actions.is_empty() {
+        return Err("nothing idle to free".to_string());
+    }
+    Ok(batch(actions))
 }
 
 fn exit_code_for(findings: &[Finding]) -> u8 {
@@ -304,6 +421,58 @@ fn format_tty(report: &VitalsReport, use_color: bool) -> String {
             "not running"
         },
     ));
+
+    let gb = |bytes: u64| bytes as f64 / 1024.0 / 1024.0 / 1024.0;
+    out.push_str(&format!(
+        "\nmemory left    {:.1} GB of {:.0} GB\n",
+        gb(system.memory.available_bytes),
+        gb(system.memory.total_bytes),
+    ));
+    if !report.quick_wins.is_empty() {
+        out.push_str("\nQuick wins:\n");
+        for win in &report.quick_wins {
+            let gain = if win.reclaimable_bytes > 0 {
+                format!("{:>5.1} GB  ", gb(win.reclaimable_bytes))
+            } else {
+                " ".repeat(10)
+            };
+            let command = if win.targets.is_empty() {
+                format!("vitals --fix {}", win.action)
+            } else {
+                format!(
+                    "vitals --fix {} --target {}",
+                    win.action,
+                    win.targets.join(",")
+                )
+            };
+            out.push_str(&format!(
+                "  {gain}{} ({})\n            {command}\n",
+                win.title, win.detail
+            ));
+        }
+    }
+    if !report.consumers.is_empty() {
+        out.push_str("\nTop consumers:\n");
+        for group in report.consumers.iter().take(5) {
+            let idle = if group.idle_bytes > 0 {
+                format!(", {:.1} GB idle", gb(group.idle_bytes))
+            } else {
+                String::new()
+            };
+            out.push_str(&format!(
+                "  {:>5.1} GB  {}{idle}\n",
+                gb(group.mem_bytes),
+                group.name
+            ));
+        }
+    }
+    if let Some(incident) = report.incidents.first() {
+        out.push_str(&format!(
+            "\nLast memory incident: {} (largest process: {})\n",
+            incident.date,
+            incident.largest_process.as_deref().unwrap_or("unknown")
+        ));
+    }
 
     out.push('\n');
     if report.findings.is_empty() {
@@ -393,6 +562,8 @@ mod tests {
                     compressor_bytes: 10_905_550_848,
                     swap_used_bytes: 21_690_548_224,
                     pageouts: 7_301_205,
+                    total_bytes: 25_769_803_776,
+                    available_bytes: 6_442_450_944,
                 },
                 cpu: CpuUsage::default(),
             },
@@ -406,6 +577,10 @@ mod tests {
             docker: DockerInfo::default(),
             processes: ProcessesInfo::default(),
             findings,
+            disk: Default::default(),
+            consumers: Vec::new(),
+            quick_wins: Vec::new(),
+            incidents: Vec::new(),
         }
     }
 
@@ -506,7 +681,7 @@ mod tests {
     fn build_action_poweroff_needs_no_target_or_report() {
         let config = Config::default();
         assert_eq!(
-            build_action("poweroff", None, None, None, &config).unwrap(),
+            build_action("poweroff", None, None, None, None, &config).unwrap(),
             Action::Poweroff
         );
     }
@@ -515,7 +690,7 @@ mod tests {
     fn build_action_stop_backup_needs_no_target_or_report() {
         let config = Config::default();
         assert_eq!(
-            build_action("stop_backup", None, None, None, &config).unwrap(),
+            build_action("stop_backup", None, None, None, None, &config).unwrap(),
             Action::StopBackup
         );
     }
@@ -525,7 +700,7 @@ mod tests {
         let mut config = Config::default();
         config.watch.timemachine_exclusions = vec!["~/.orbstack".to_string()];
         assert_eq!(
-            build_action("add_exclusions", None, None, None, &config).unwrap(),
+            build_action("add_exclusions", None, None, None, None, &config).unwrap(),
             Action::AddExclusions(vec!["~/.orbstack".to_string()])
         );
     }
@@ -533,7 +708,7 @@ mod tests {
     #[test]
     fn build_action_add_exclusions_errors_when_none_configured() {
         let config = Config::default();
-        assert!(build_action("add_exclusions", None, None, None, &config).is_err());
+        assert!(build_action("add_exclusions", None, None, None, None, &config).is_err());
     }
 
     #[test]
@@ -555,7 +730,15 @@ mod tests {
         ];
         let config = Config::default();
         assert_eq!(
-            build_action("kill_orphaned_agents", None, Some(&report), None, &config).unwrap(),
+            build_action(
+                "kill_orphaned_agents",
+                None,
+                None,
+                Some(&report),
+                None,
+                &config
+            )
+            .unwrap(),
             Action::KillOrphanedAgents(vec![1])
         );
     }
@@ -564,13 +747,21 @@ mod tests {
     fn build_action_kill_orphaned_agents_errors_when_none_found() {
         let report = sample_report(Vec::new());
         let config = Config::default();
-        assert!(build_action("kill_orphaned_agents", None, Some(&report), None, &config).is_err());
+        assert!(build_action(
+            "kill_orphaned_agents",
+            None,
+            None,
+            Some(&report),
+            None,
+            &config
+        )
+        .is_err());
     }
 
     #[test]
     fn build_action_kill_orphaned_agents_errors_without_a_report() {
         let config = Config::default();
-        assert!(build_action("kill_orphaned_agents", None, None, None, &config).is_err());
+        assert!(build_action("kill_orphaned_agents", None, None, None, None, &config).is_err());
     }
 
     fn sample_process(pid: u32, cpu_percent: f64, etime_seconds: u64) -> ProcessEntry {
@@ -597,6 +788,7 @@ mod tests {
                 "kill_runaway_processes",
                 None,
                 None,
+                None,
                 Some(&processes),
                 &config
             )
@@ -613,6 +805,7 @@ mod tests {
             "kill_runaway_processes",
             None,
             None,
+            None,
             Some(&processes),
             &config
         )
@@ -622,15 +815,15 @@ mod tests {
     #[test]
     fn build_action_kill_runaway_processes_errors_without_a_process_list() {
         let config = Config::default();
-        assert!(build_action("kill_runaway_processes", None, None, None, &config).is_err());
+        assert!(build_action("kill_runaway_processes", None, None, None, None, &config).is_err());
     }
 
     #[test]
     fn build_action_stop_project_requires_target() {
         let config = Config::default();
-        assert!(build_action("stop_project", None, None, None, &config).is_err());
+        assert!(build_action("stop_project", None, None, None, None, &config).is_err());
         assert_eq!(
-            build_action("stop_project", Some("witte"), None, None, &config).unwrap(),
+            build_action("stop_project", Some("witte"), None, None, None, &config).unwrap(),
             Action::StopProject("witte".to_string())
         );
     }
@@ -638,24 +831,153 @@ mod tests {
     #[test]
     fn build_action_kill_session_parses_pid() {
         let config = Config::default();
-        assert!(build_action("kill_session", Some("not-a-pid"), None, None, &config).is_err());
+        assert!(
+            build_action("kill_session", Some("not-a-pid"), None, None, None, &config).is_err()
+        );
         assert_eq!(
-            build_action("kill_session", Some("90548"), None, None, &config).unwrap(),
+            build_action("kill_session", Some("90548"), None, None, None, &config).unwrap(),
             Action::KillSession(90548)
         );
     }
 
     #[test]
+    fn build_action_accepts_several_targets_as_a_batch() {
+        let config = Config::default();
+        assert_eq!(
+            build_action(
+                "stop_project",
+                Some("verdi, pagetree"),
+                None,
+                None,
+                None,
+                &config
+            )
+            .unwrap(),
+            Action::Batch(vec![
+                Action::StopProject("verdi".to_string()),
+                Action::StopProject("pagetree".to_string()),
+            ])
+        );
+        assert_eq!(
+            build_action("kill_session", Some("1,2"), None, None, None, &config).unwrap(),
+            Action::Batch(vec![Action::KillSession(1), Action::KillSession(2)])
+        );
+        assert_eq!(
+            build_action("start_project", Some("witte"), None, None, None, &config).unwrap(),
+            Action::StartProject("witte".to_string())
+        );
+        assert!(build_action("kill_session", Some(","), None, None, None, &config).is_err());
+    }
+
+    #[test]
+    fn build_action_quit_app_validates_the_name() {
+        let config = Config::default();
+        assert_eq!(
+            build_action("quit_app", Some("Slack"), None, None, None, &config).unwrap(),
+            Action::QuitApp("Slack".to_string())
+        );
+        assert!(build_action("quit_app", Some("a\"b"), None, None, None, &config).is_err());
+        assert!(build_action("restart_app", None, None, None, None, &config).is_err());
+    }
+
+    fn idle_item(id: &str, target: &str) -> vitals_core::types::ConsumerItem {
+        vitals_core::types::ConsumerItem {
+            id: id.to_string(),
+            name: target.to_string(),
+            detail: String::new(),
+            mem_bytes: 1024,
+            cpu_percent: 0.0,
+            idle: true,
+            idle_seconds: Some(9000),
+            protected: false,
+            action: Some(vitals_core::types::ItemAction {
+                action: "x".to_string(),
+                target: Some(target.to_string()),
+                label: "x".to_string(),
+                confirm: false,
+            }),
+        }
+    }
+
+    fn report_with_idle_items() -> VitalsReport {
+        let mut report = sample_report(Vec::new());
+        report.consumers = vec![vitals_core::types::ConsumerGroup {
+            id: "mixed".to_string(),
+            name: "mixed".to_string(),
+            mem_bytes: 3072,
+            cpu_percent: 0.0,
+            idle_bytes: 3072,
+            items: vec![
+                idle_item("ddev:verdi", "verdi"),
+                idle_item("session:42", "42"),
+                idle_item("acp:7", "7"),
+            ],
+        }];
+        report
+    }
+
+    #[test]
+    fn free_idle_frees_every_kind_by_default_and_respects_the_scope() {
+        let config = Config::default();
+        let report = report_with_idle_items();
+        assert_eq!(
+            build_action("free_idle", None, None, Some(&report), None, &config).unwrap(),
+            Action::Batch(vec![
+                Action::StopProject("verdi".to_string()),
+                Action::KillSession(42),
+                Action::KillOrphanedAgents(vec![7]),
+            ])
+        );
+        assert_eq!(
+            build_action(
+                "free_idle",
+                None,
+                Some("ddev"),
+                Some(&report),
+                None,
+                &config
+            )
+            .unwrap(),
+            Action::StopProject("verdi".to_string())
+        );
+        assert!(
+            build_action("free_idle", None, Some("ram"), Some(&report), None, &config).is_err()
+        );
+        let empty = sample_report(Vec::new());
+        assert!(build_action("free_idle", None, None, Some(&empty), None, &config).is_err());
+    }
+
+    #[test]
+    fn tty_report_lists_quick_wins_with_their_command() {
+        let mut report = sample_report(Vec::new());
+        report.quick_wins = vec![vitals_core::types::QuickWin {
+            id: "stop_idle_ddev".to_string(),
+            title: "Stop 1 idle DDEV project".to_string(),
+            detail: "verdi".to_string(),
+            reclaimable_bytes: 1_503_238_553,
+            action: "stop_project".to_string(),
+            targets: vec!["verdi".to_string()],
+            label: "Stop".to_string(),
+            confirm: false,
+            undo_action: Some("start_project".to_string()),
+        }];
+        let text = format_tty(&report, false);
+        assert!(text.contains("Quick wins"));
+        assert!(text.contains("1.4 GB"));
+        assert!(text.contains("vitals --fix stop_project --target verdi"));
+    }
+
+    #[test]
     fn build_action_rejects_unknown_action() {
         let config = Config::default();
-        assert!(build_action("launch_the_missiles", None, None, None, &config).is_err());
+        assert!(build_action("launch_the_missiles", None, None, None, None, &config).is_err());
     }
 
     #[test]
     fn build_action_prune_docker_images_needs_no_target_or_report() {
         let config = Config::default();
         assert_eq!(
-            build_action("prune_docker_images", None, None, None, &config).unwrap(),
+            build_action("prune_docker_images", None, None, None, None, &config).unwrap(),
             Action::PruneDockerImages
         );
     }

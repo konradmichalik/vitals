@@ -17,15 +17,18 @@ import UserNotifications
 /// while the badge is a real, separate `NSView` layered on top — never
 /// part of the same image, so it's never subject to template masking.
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate, NSPopoverDelegate {
     @AppStorage(AppNotifier.alertStorageKey) private var notifyOnAlerts = true
 
     let appState = AppState()
 
     private var statusItem: NSStatusItem?
-    private var badgeView: NSView?
     private var popover: NSPopover?
     private var cancellable: AnyCancellable?
+    private var defaultsObserver: NSObjectProtocol?
+    private var lastShownState: MenuBarState?
+    private var lastShownMode: MenuBarMode?
+    private var lastToolTip: String?
 
     /// `xcodebuild test` hosts the app in a process that UNUserNotificationCenter
     /// can't resolve a bundle identity for (it crashes with "could not
@@ -54,6 +57,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     func applicationDidFinishLaunching(_ notification: Foundation.Notification) {
         guard !isRunningTests else { return }
         UNUserNotificationCenter.current().delegate = self
+        AppNotifier.registerCategories()
         if notifyOnAlerts {
             AppNotifier.requestPermission()
         }
@@ -61,53 +65,65 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     }
 
     private func setupStatusItem() {
-        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = item.button {
             let icon = NSImage(systemSymbolName: "waveform.path.ecg", accessibilityDescription: "Vitals")
             icon?.isTemplate = true
             button.image = icon
+            button.imagePosition = .imageLeading
             button.action = #selector(toggleDropdown)
             button.target = self
-
-            // A manual frame here read `button.bounds` before the button
-            // had actually laid out to fit the new image, so the badge
-            // landed wherever that premature (near-zero) size implied —
-            // constraints resolve correctly regardless of when AppKit
-            // finishes that layout pass.
-            let diameter: CGFloat = 6
-            let badge = NSView()
-            badge.translatesAutoresizingMaskIntoConstraints = false
-            badge.wantsLayer = true
-            badge.layer?.cornerRadius = diameter / 2
-            button.addSubview(badge)
-            NSLayoutConstraint.activate([
-                badge.widthAnchor.constraint(equalToConstant: diameter),
-                badge.heightAnchor.constraint(equalToConstant: diameter),
-                badge.trailingAnchor.constraint(equalTo: button.trailingAnchor, constant: -1),
-                badge.bottomAnchor.constraint(equalTo: button.bottomAnchor, constant: -1),
-            ])
-            badgeView = badge
         }
         statusItem = item
 
         let popover = NSPopover()
         popover.behavior = .transient
-        popover.contentViewController = NSHostingController(rootView: MenubarView().environmentObject(appState))
+        popover.delegate = self
         self.popover = popover
 
-        cancellable = appState.$report.sink { [weak self] report in
-            self?.updateBadge(for: report?.findings ?? [])
+        cancellable = appState.$menuBar.combineLatest(appState.$report).sink { [weak self] state, report in
+            self?.updateStatusItem(state, findings: report?.findings ?? [])
+        }
+        defaultsObserver = NotificationCenter.default.addObserver(
+            forName: UserDefaults.didChangeNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.updateStatusItem(self.appState.menuBar, findings: self.appState.report?.findings ?? [])
+            }
         }
     }
 
-    /// The dot only earns its keep as an interrupt for something worth
-    /// noticing — showing it green for the common "all clear" case just
-    /// added a permanent fixture next to the icon with nothing to say.
-    private func updateBadge(for findings: [Finding]) {
-        let light = TrafficLight.from(findings: findings)
-        badgeView?.isHidden = light == .green
-        badgeView?.layer?.backgroundColor = NSColor(light.color).cgColor
-        statusItem?.button?.toolTip = TrafficLight.tooltip(for: findings)
+    /// The icon stays a template image so macOS colors it like every other
+    /// menu bar icon. The gauge and value sit in the button's title as a
+    /// separate attachment: a template image can only be one uniform
+    /// color, so they could never share an image with the icon.
+    private func updateStatusItem(_ state: MenuBarState, findings: [Finding]) {
+        guard let button = statusItem?.button else { return }
+        let mode = MenuBarMode(rawValue: UserDefaults.standard.string(forKey: AppSettings.Key.menuBarMode) ?? "") ?? .gaugeAndValue
+        // Every `UserDefaults` write lands here too; only touch the
+        // button when what it shows actually changed.
+        if lastShownState != state || lastShownMode != mode {
+            button.attributedTitle = MenuBarGauge.title(for: state, mode: mode)
+            lastShownState = state
+            lastShownMode = mode
+        }
+        let toolTip = TrafficLight.tooltip(for: findings)
+        if lastToolTip != toolTip {
+            button.toolTip = toolTip
+            lastToolTip = toolTip
+        }
+    }
+
+    /// The popover's view tree exists only while it is open. Kept alive,
+    /// SwiftUI would re-evaluate every screen and redraw every chart on
+    /// each poll with nobody looking.
+    func popoverDidClose(_ notification: Foundation.Notification) {
+        popover?.contentViewController = nil
+    }
+
+    func applicationWillTerminate(_ notification: Foundation.Notification) {
+        appState.flushHistory()
     }
 
     @objc private func toggleDropdown() {
@@ -125,7 +141,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
             // real focus without needing to manage window key status by
             // hand.
             NSApp.activate(ignoringOtherApps: true)
+            popover.contentViewController = NSHostingController(rootView: MenubarView().environmentObject(appState))
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        }
+    }
+
+    /// The button on the memory warning banner frees idle items directly.
+    nonisolated func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        let isFreeIdle = response.actionIdentifier == AppNotifier.freeIdleAction
+        completionHandler()
+        guard isFreeIdle else { return }
+        Task { @MainActor in
+            self.appState.freeAllIdle()
         }
     }
 

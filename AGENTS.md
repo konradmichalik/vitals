@@ -10,7 +10,7 @@ Vitals is a macOS tool that correlates system metrics with the local dev toolcha
 
 ## Structure
 
-- `core/`: `vitals-core` crate. `probes/` (one module per data source), `rules.rs` (rule engine), `actions.rs` (`Action` enum, `--fix` targets), `config.rs` (`~/.vitals.toml`), `types.rs` (JSON contract), `report.rs`
+- `core/`: `vitals-core` crate. `probes/` (one module per data source), `rules.rs` (rule engine), `consumers.rs` (consumer groups, idle items, quick wins), `activity.rs` (observed DDEV activity for idle detection), `actions.rs` (`Action` enum, `--fix` targets), `config.rs` (`~/.vitals.toml`, app overrides), `types.rs` (JSON contract), `report.rs`
 - `cli/`: the `vitals` binary. Flag parsing, confirmation prompts and output formatting only, no probe logic
 - `app/vitals-ffi/`: root workspace member, C ABI (`vitals_collect`, `vitals_free_string`) linking `vitals-core` directly
 - `app/VitalsApp/`: SwiftUI target (`Bridge/`, `Models/`, `Support/`, `Views/`)

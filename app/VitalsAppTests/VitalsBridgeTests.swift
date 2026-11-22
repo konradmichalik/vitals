@@ -51,6 +51,34 @@ final class VitalsBridgeTests: XCTestCase {
         XCTAssertEqual(report.processes.topByCpu.first?.name, "node")
     }
 
+    /// Schema 4 adds consumer groups, quick wins, incidents and the disk
+    /// total; older payloads without them must still decode (see above).
+    func testDecodesSchemaFourAdditions() {
+        let json = successJSON
+            .replacingOccurrences(of: #""pageouts": 7301205"#, with: #""pageouts": 7301205, "totalBytes": 25769803776, "availableBytes": 2791728742"#)
+            .replacingOccurrences(of: #""findings": ["#, with: """
+            "disk": { "totalBytes": 104857600 },
+            "consumers": [{ "id": "ddev", "name": "DDEV", "memBytes": 100, "cpuPercent": 1.5, "idleBytes": 40,
+              "items": [{ "id": "ddev:verdi", "name": "verdi", "detail": "no activity for 3 h", "memBytes": 40, "cpuPercent": 0.1,
+                "idle": true, "idleSeconds": 10800, "protected": false,
+                "action": { "action": "stop_project", "target": "verdi", "label": "Stop", "confirm": false } }] }],
+            "quickWins": [{ "id": "stop_idle_ddev", "title": "Stop 1 idle DDEV project", "detail": "verdi", "reclaimableBytes": 40,
+              "action": "stop_project", "targets": ["verdi"], "label": "Stop", "confirm": false, "undoAction": "start_project" }],
+            "incidents": [{ "file": "JetsamEvent-x.ips", "date": "2026-11-16 16:42:00 +0100", "largestProcess": "PhpStorm",
+              "pageSizeBytes": 16384, "killed": [{ "pid": 7, "name": "PhpStorm", "bytes": 1, "reason": "vm-pageshortage" }], "top": [] }],
+            "findings": [
+            """)
+        guard case .success(let report) = VitalsBridge.decode(json) else {
+            return XCTFail("expected schema 4 payload to decode")
+        }
+        XCTAssertEqual(report.system.memory.availableBytes, 2_791_728_742)
+        XCTAssertEqual(report.disk?.totalBytes, 104_857_600)
+        XCTAssertEqual(report.consumerGroups.first?.idleItems.first?.action?.target, "verdi")
+        XCTAssertEqual(report.quickWinList.first?.undoAction, "start_project")
+        XCTAssertEqual(report.incidentList.first?.killed.first?.reason, "vm-pageshortage")
+        XCTAssertEqual(report.idleBytes, 40)
+    }
+
     func testDecodesAReportedErrorEnvelope() {
         let result = VitalsBridge.decode(errorJSON)
         guard case .failure(let error) = result else {

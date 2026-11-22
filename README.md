@@ -81,11 +81,22 @@ vitals --fix kill_session --target 90548
 vitals --fix kill_runaway_processes
 vitals --fix prune_docker_images
 vitals --fix kill_orphaned_agents --dry-run
+
+# free everything idle: idle DDEV projects, idle Claude sessions, orphaned agents
+vitals --fix free_idle --dry-run
+vitals --fix free_idle --scope ddev,orphans --protect witte --idle-minutes 60
+
+vitals --fix stop_project --target verdi,pagetree   # several targets at once
+vitals --fix start_project --target verdi
+vitals --fix quit_app --target "Google Chrome"
+vitals --fix restart_app --target PhpStorm
 ```
 
 Every action asks for confirmation unless `actions.require_confirmation = false` is set
-in `~/.vitals.toml` — there is no bulk "kill all" by design; each fix targets one
-project, PID, or resource at a time.
+in `~/.vitals.toml`. There is no "kill all": `free_idle` only touches items that count as
+idle under `[idle]` (no transcript write or container activity for `after_minutes`) and
+never anything listed in `idle.protected`. The TTY report lists these as quick wins with
+the exact command to run.
 
 > [!TIP]
 > Add `--dry-run` to any `--fix` action to preview what it would do without running it.
@@ -103,10 +114,21 @@ make test
 make lint
 ```
 
-A traffic-light icon (from the highest-severity finding) with a dropdown showing load
-average, CPU/memory trends, running DDEV projects and Claude Code sessions (with their
-CPU share), the current top processes by CPU, and any findings — each backed by the
-same confirmation dialog before running a fix.
+The menu bar shows how full memory is, and the free memory (or CPU) once macOS reports
+pressure. The popover leads with one sentence about the state of the Mac, four vital
+signs with their recent trend (memory, CPU, swap, disk), quick wins with the memory each
+one gives back, and the top consumers grouped as DDEV, AI agents, PhpStorm, containers,
+browser, other apps and system. A tap opens the items of a group, the history of a metric
+(with the pressure level macOS reported), or the activity log with memory incidents read
+from macOS' JetsamEvent reports.
+
+Idle items are freed without asking and can be started again from the toast; anything
+that interrupts work (quitting an app, ending an active session) asks first. Guard, off by
+default, frees idle items on its own once memory pressure reaches the chosen level.
+Actions run through the installed `vitals` CLI.
+
+After pulling changes that add or remove Swift files, regenerate the project with
+`make -C app xcode`.
 
 ## 🧑‍💻 Contributing
 

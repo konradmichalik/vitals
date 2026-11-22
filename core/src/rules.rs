@@ -246,6 +246,11 @@ fn mutagen_active(processes: &[ProcessEntry], config: &Config) -> Option<Finding
 /// it must classify "runaway" exactly the way this rule did or it could
 /// kill something this rule never actually flagged.
 pub fn is_runaway(process: &ProcessEntry, config: &Config) -> bool {
+    // `kernel_task` running hot is how macOS throttles an overheating
+    // machine. It cannot be killed, and offering to would be wrong advice.
+    if process.comm == "kernel_task" {
+        return false;
+    }
     let min_seconds = (config.thresholds.runaway_min_minutes * 60.0) as u64;
     process.cpu_percent > config.thresholds.runaway_cpu_percent
         && process.etime_seconds > min_seconds
@@ -367,7 +372,7 @@ fn ddev_project_problems(report: &VitalsReport) -> Option<Finding> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::types::{
         AcpAgent, ClaudeSession, CoreCount, CpuUsage, DdevInfo, DockerContainer, DockerInfo,
@@ -375,7 +380,7 @@ mod tests {
         TimeMachineInfo, TmExclusion,
     };
 
-    fn base_report() -> VitalsReport {
+    pub(crate) fn base_report() -> VitalsReport {
         VitalsReport {
             schema_version: 1,
             timestamp: "2026-08-12T09:52:00Z".to_string(),
@@ -399,6 +404,8 @@ mod tests {
                     compressor_bytes: 0,
                     swap_used_bytes: 0,
                     pageouts: 0,
+                    total_bytes: 0,
+                    available_bytes: 0,
                 },
                 cpu: CpuUsage::default(),
             },
@@ -412,6 +419,10 @@ mod tests {
             docker: DockerInfo::default(),
             processes: ProcessesInfo::default(),
             findings: Vec::new(),
+            disk: Default::default(),
+            consumers: Vec::new(),
+            quick_wins: Vec::new(),
+            incidents: Vec::new(),
         }
     }
 
@@ -695,6 +706,8 @@ mod tests {
             kind: "cli".to_string(),
             version: "2.1.228".to_string(),
             working_directory: None,
+            tree_rss_bytes: 0,
+            idle_seconds: None,
         }];
         let config = Config::default();
 
@@ -1071,6 +1084,8 @@ mod tests {
             kind: "cli".to_string(),
             version: "1.0".to_string(),
             working_directory: None,
+            tree_rss_bytes: 0,
+            idle_seconds: None,
         }];
         let runaway = ProcessEntry {
             pid: 4,

@@ -18,6 +18,21 @@ enum AppNotifier {
     /// since they explicitly asked for that action to run.
     static let alertStorageKey = "notifyOnAlerts"
 
+    /// Category for the memory warning banner, whose button frees idle
+    /// items right from the notification (handled in `AppDelegate`).
+    static let freeIdleCategory = "VITALS_FREE_IDLE"
+    static let freeIdleAction = "VITALS_FREE_IDLE_ACTION"
+
+    /// Notification actions are declared up front per category, so the
+    /// button title is generic; the amount is in the banner text.
+    static func registerCategories() {
+        let action = UNNotificationAction(identifier: freeIdleAction, title: "Free idle items", options: [])
+        let category = UNNotificationCategory(
+            identifier: freeIdleCategory, actions: [action], intentIdentifiers: [], options: []
+        )
+        UNUserNotificationCenter.current().setNotificationCategories([category])
+    }
+
     /// Drives the notification's large attachment image — the small
     /// corner badge already shows the app's own icon (via bundle
     /// identity), so this is the one visual that can actually tell a
@@ -53,11 +68,22 @@ enum AppNotifier {
     }
 
     @MainActor
-    static func notify(id: String, title: String, body: String, kind: Kind) {
+    static func notify(
+        id: String,
+        title: String,
+        body: String,
+        kind: Kind,
+        category: String? = nil
+    ) {
+        // The test host has no bundle identifier, which crashes the notification center.
+        guard ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] == nil else { return }
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
         content.sound = .default
+        if let category {
+            content.categoryIdentifier = category
+        }
         if let attachment = iconAttachment(kind: kind) {
             content.attachments = [attachment]
         }

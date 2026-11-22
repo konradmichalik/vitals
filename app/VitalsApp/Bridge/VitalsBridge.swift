@@ -22,6 +22,17 @@ enum VitalsBridge {
         return decode(String(cString: ptr))
     }
 
+    /// `overridesJSON` carries the app's own settings to the core (see
+    /// `AppSettings.overridesJSON`).
+    static func collect(overridesJSON: String) -> Result<VitalsReport, VitalsCollectError> {
+        let raw = overridesJSON.withCString { vitals_collect_with($0) }
+        guard let ptr = raw else {
+            return .failure(.nullPointer)
+        }
+        defer { vitals_free_string(ptr) }
+        return decode(String(cString: ptr))
+    }
+
     static func decode(_ json: String) -> Result<VitalsReport, VitalsCollectError> {
         guard let data = json.data(using: .utf8) else {
             return .failure(.invalidUTF8)

@@ -21,6 +21,32 @@ const HOMEBREW_PATHS: &[&str] = &[
     "/usr/local/sbin",
 ];
 
+/// System tools are run by absolute path, so a directory earlier in an
+/// inherited `PATH` can never substitute its own `kill` or `osascript`.
+/// Tools that live in Homebrew or user directories (`ddev`, `docker`)
+/// still go through `PATH`. Where the fixed path does not exist (other
+/// platforms, a relocated tool) the bare name is used as before.
+const SYSTEM_TOOLS: &[(&str, &str)] = &[
+    ("sysctl", "/usr/sbin/sysctl"),
+    ("ps", "/bin/ps"),
+    ("kill", "/bin/kill"),
+    ("tmutil", "/usr/bin/tmutil"),
+    ("osascript", "/usr/bin/osascript"),
+    ("lsof", "/usr/sbin/lsof"),
+    ("top", "/usr/bin/top"),
+    ("vm_stat", "/usr/bin/vm_stat"),
+    ("iostat", "/usr/sbin/iostat"),
+    ("pgrep", "/usr/bin/pgrep"),
+    ("open", "/usr/bin/open"),
+];
+
+fn resolve(command: &str, exists: impl Fn(&str) -> bool) -> &str {
+    SYSTEM_TOOLS
+        .iter()
+        .find(|(name, path)| *name == command && exists(path))
+        .map_or(command, |(_, path)| path)
+}
+
 fn augmented_path(current: Option<&str>) -> String {
     let mut parts: Vec<&str> = current
         .unwrap_or("")
@@ -61,7 +87,8 @@ pub(crate) fn run_with_timeout(
 ) -> Result<String, VitalsError> {
     let invocation = || format!("{command} {}", args.join(" "));
 
-    let mut child = Command::new(command)
+    let program = resolve(command, |path| std::path::Path::new(path).is_file());
+    let mut child = Command::new(program)
         .args(args)
         .env(
             "PATH",
@@ -145,6 +172,14 @@ mod tests {
         let err = run_with_timeout("sleep", &["5"], Duration::from_millis(100)).unwrap_err();
         assert!(matches!(err, VitalsError::Timeout { .. }));
         assert!(start.elapsed() < Duration::from_secs(2));
+    }
+
+    #[test]
+    fn system_tools_resolve_to_their_absolute_path_when_present() {
+        assert_eq!(resolve("kill", |_| true), "/bin/kill");
+        assert_eq!(resolve("osascript", |_| true), "/usr/bin/osascript");
+        assert_eq!(resolve("kill", |_| false), "kill");
+        assert_eq!(resolve("ddev", |_| true), "ddev");
     }
 
     #[test]
